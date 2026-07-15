@@ -27,8 +27,9 @@ namespace ClaudeTokenMeter
         private const float InnerPadTop = 4f;
         private const float InnerPadBottom = 4f;
         private const float TitleH = 13f;
-        private const int MaxBars = 3;
+        private const int MaxBars = 6;
         private const float MinRowH = 8f;
+        private const float ColumnGap = 8f;
 
         // ---- Public entry point -------------------------------------------
 
@@ -313,24 +314,28 @@ namespace ClaudeTokenMeter
             float barsAreaH = innerH - (titleVisible ? TitleH : 0f);
             float barsTop = InnerPadTop + (titleVisible ? TitleH : 0f);
 
-            int barCount = rows.Count;
-            // Cap count further if rows would be too short.
-            while (barCount > 1 && (barsAreaH / barCount) < MinRowH)
-            {
-                barCount--;
-            }
-            if (barCount < rows.Count)
-            {
-                rows.RemoveRange(barCount, rows.Count - barCount);
-            }
+            // How many single-column rows fit in the bars area at MinRowH.
+            int capacityPerColumn = (int)Math.Max(1f, (float)Math.Floor(barsAreaH / MinRowH));
 
             if (rows.Count == 1)
             {
                 DrawSingleBar(g, cfg, usage, s, rows[0], titleVisible, barsTop, barsAreaH);
             }
+            else if (rows.Count <= capacityPerColumn)
+            {
+                // Single-column multi-bar layout (unchanged).
+                DrawMultiBar(g, cfg, s, rows, barsTop, barsAreaH);
+            }
             else
             {
-                DrawMultiBar(g, cfg, s, rows, barsTop, barsAreaH);
+                // Two-column layout. Show up to twice the per-column capacity.
+                int displayable = Math.Min(rows.Count, capacityPerColumn * 2);
+                int hidden = rows.Count - displayable;
+                DrawTwoColumnBars(g, cfg, s, rows, displayable, barsTop, barsAreaH);
+                if (hidden > 0)
+                {
+                    DrawHiddenCount(g, cfg, s, hidden, barsTop, barsAreaH);
+                }
             }
         }
 
@@ -455,50 +460,138 @@ namespace ClaudeTokenMeter
             }
         }
 
-        // 2-3 rows: [label][bar][pct]. Rows distributed evenly in barsAreaH.
-        // Reset time is intentionally omitted per-row (tooltip carries it).
+        // 2-N rows in a single column: [label][bar][pct]. Rows distributed evenly
+        // in barsAreaH. Reset time is intentionally omitted per-row (tooltip carries it).
         private static void DrawMultiBar(Graphics g, Config cfg, float s, List<BarRow> rows, float barsTop, float barsAreaH)
         {
             int count = rows.Count;
             float rowH = barsAreaH / count;
 
+            // Single-column metrics (preserve the classic look).
             float labelW = 26f;
             float pctW = cfg.showValueText ? 30f : 0f;
-            float gap = 4f;
 
             float contentW = cfg.widgetWidth - ContentX - ContentRightPad;
-            float barX = ContentX + labelW + gap;
-            float barW = contentW - labelW - gap - (cfg.showValueText ? (gap + pctW) : 0f);
-            if (barW < 10f)
-            {
-                barW = 10f;
-            }
-            float barH = Math.Min(7f, rowH - 3f);
-            if (barH < 3f)
-            {
-                barH = 3f;
-            }
 
             for (int i = 0; i < count; i++)
             {
                 BarRow row = rows[i];
                 float rowTop = barsTop + rowH * i;
                 float rowMid = rowTop + rowH / 2f;
-                float barY = rowMid - barH / 2f;
 
-                DrawMultiLabel(g, s, row.Label, ContentX, rowMid);
-                DrawBar(g, barX * s, barY * s, barW * s, barH * s, row.Fraction);
-
-                if (cfg.showValueText)
-                {
-                    DrawMultiPct(g, s, row.PctText, barX + barW + gap, pctW, rowMid);
-                }
+                DrawBarCell(g, cfg, s, row, ContentX, contentW, rowMid, rowH,
+                    labelW, pctW, cfg.showValueText, false, false);
             }
         }
 
-        private static void DrawMultiLabel(Graphics g, float s, string label, float xLogical, float rowMidLogical)
+        // Two-column layout. The first `displayable` rows are split column-major:
+        // the LEFT column holds the first ceil(displayable/2) rows top-to-bottom,
+        // the RIGHT column holds the remainder. Both columns use the LEFT column's
+        // row count for vertical distribution so rows align horizontally.
+        private static void DrawTwoColumnBars(Graphics g, Config cfg, float s, List<BarRow> rows,
+            int displayable, float barsTop, float barsAreaH)
         {
-            using (Font labelFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
+            int leftCount = (displayable + 1) / 2; // ceil(displayable / 2)
+
+            float contentW = cfg.widgetWidth - ContentX - ContentRightPad;
+            float colW = (contentW - ColumnGap) / 2f;
+
+            // Vertical distribution mirrors the single-column path but always uses
+            // the left column's row count so the two columns line up row-for-row.
+            float rowH = barsAreaH / leftCount;
+
+            // Compact per-cell metrics for two columns.
+            float labelW = 20f;
+            float pctW = cfg.showValueText ? 26f : 0f;
+
+            float leftX = ContentX;
+            float rightX = ContentX + colW + ColumnGap;
+
+            for (int i = 0; i < displayable; i++)
+            {
+                BarRow row = rows[i];
+                bool inLeft = i < leftCount;
+                int rowIndex = inLeft ? i : (i - leftCount);
+                float cellX = inLeft ? leftX : rightX;
+
+                float rowTop = barsTop + rowH * rowIndex;
+                float rowMid = rowTop + rowH / 2f;
+
+                // The source dot sits at ~(widgetWidth-12, 7) logical. The right
+                // column's top cell can reach that zone when the title is hidden
+                // and the first row starts high. Inset that one cell if needed.
+                bool insetForDot = (!inLeft) && rowIndex == 0 && (rowMid - rowH / 2f) < 12f;
+
+                DrawBarCell(g, cfg, s, row, cellX, colW, rowMid, rowH,
+                    labelW, pctW, cfg.showValueText, true, insetForDot);
+            }
+        }
+
+        // Draws one bar cell: [label][bar][pct] within a cell starting at
+        // xLogical of width cellWLogical, vertically centered on rowMidLogical.
+        // Shared by the single-column and two-column paths; metrics are passed in.
+        // `compact` selects the smaller label/pct fonts used in two-column mode.
+        // `insetForDot` reserves a little right-edge room so the top-right source
+        // dot is never overlapped by a bar or pct text.
+        private static void DrawBarCell(Graphics g, Config cfg, float s, BarRow row,
+            float xLogical, float cellWLogical, float rowMidLogical, float rowH,
+            float labelW, float pctW, bool showPct, bool compact, bool insetForDot)
+        {
+            float gap = 4f;
+            float cellW = cellWLogical;
+            if (insetForDot)
+            {
+                cellW -= 8f;
+                if (cellW < 20f)
+                {
+                    cellW = 20f;
+                }
+            }
+
+            float barX = xLogical + labelW + gap;
+            float barW = cellW - labelW - gap - (showPct ? (gap + pctW) : 0f);
+            if (barW < 10f)
+            {
+                barW = 10f;
+            }
+            float barH = Math.Min(compact ? 6f : 7f, rowH - 3f);
+            if (barH < 3f)
+            {
+                barH = 3f;
+            }
+            float barY = rowMidLogical - barH / 2f;
+
+            DrawMultiLabel(g, s, row.Label, xLogical, rowMidLogical, compact);
+            DrawBar(g, barX * s, barY * s, barW * s, barH * s, row.Fraction);
+
+            if (showPct)
+            {
+                DrawMultiPct(g, s, row.PctText, barX + barW + gap, pctW, rowMidLogical, compact);
+            }
+        }
+
+        // Tiny "+N" marker at the far bottom-right inside the card, indicating
+        // some bars are hidden (the tooltip lists everything).
+        private static void DrawHiddenCount(Graphics g, Config cfg, float s, int hidden, float barsTop, float barsAreaH)
+        {
+            string text = "+" + hidden.ToString(CultureInfo.InvariantCulture);
+            using (Font font = new Font("Segoe UI", 8f * s, GraphicsUnit.Pixel))
+            using (SolidBrush brush = new SolidBrush(Color.FromArgb(140, 140, 140)))
+            {
+                StringFormat tight = StringFormat.GenericTypographic;
+                SizeF size = g.MeasureString(text, font, int.MaxValue, tight);
+                float rightEdge = (cfg.widgetWidth - ContentRightPad) * s;
+                float x = rightEdge - size.Width;
+                float bottomEdge = (barsTop + barsAreaH) * s;
+                float y = bottomEdge - size.Height;
+                g.DrawString(text, font, brush, x, y, tight);
+            }
+        }
+
+        private static void DrawMultiLabel(Graphics g, float s, string label, float xLogical, float rowMidLogical, bool compact)
+        {
+            float fontPx = compact ? 8.5f : 9f;
+            using (Font labelFont = new Font("Segoe UI", fontPx * s, GraphicsUnit.Pixel))
             using (SolidBrush labelBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
             {
                 SizeF size = g.MeasureString(label, labelFont);
@@ -507,9 +600,10 @@ namespace ClaudeTokenMeter
             }
         }
 
-        private static void DrawMultiPct(Graphics g, float s, string pctText, float xLogical, float widthLogical, float rowMidLogical)
+        private static void DrawMultiPct(Graphics g, float s, string pctText, float xLogical, float widthLogical, float rowMidLogical, bool compact)
         {
-            using (Font pctFont = new Font("Segoe UI", 9.5f * s, FontStyle.Bold, GraphicsUnit.Pixel))
+            float fontPx = compact ? 8.5f : 9.5f;
+            using (Font pctFont = new Font("Segoe UI", fontPx * s, FontStyle.Bold, GraphicsUnit.Pixel))
             using (SolidBrush pctBrush = new SolidBrush(Color.FromArgb(240, 240, 240)))
             {
                 SizeF size = g.MeasureString(pctText, pctFont);

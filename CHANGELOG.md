@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-07-16
+
+### Fixed
+- Three or more bars no longer require hiding the title: when bars don't fit vertically, the card automatically switches to a two-column layout (up to 4 bars with the title, 6 without)
+- Bars beyond the displayable count are no longer dropped silently — a small "+N" marker shows how many are hidden (the tooltip lists all)
+
 ## [1.5.0] - 2026-07-15
 
 ### Added
