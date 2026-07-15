@@ -1,0 +1,10 @@
+ClaudeTokenMeter.exe
+*.pdb
+dump.txt
+config.json
+.claude/
+# Local test screenshots (root only — docs/ images are tracked)
+/*.png
+/*.webp
+Thumbs.db
+desktop.ini

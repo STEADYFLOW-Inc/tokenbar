@@ -1,0 +1,259 @@
+using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Microsoft.Win32;
+
+namespace ClaudeTokenMeter
+{
+    public class MeterAppContext : ApplicationContext
+    {
+        private const string RunKeyPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+        private const string RunValueName = "ClaudeTokenMeter";
+
+        private readonly Config cfg;
+        private readonly System.Windows.Forms.Timer placeTimer;
+        private readonly System.Windows.Forms.Timer dataTimer;
+        private TaskScheduler uiScheduler;
+        private WidgetForm widget;
+        private UsageResult lastUsage;
+        private volatile bool refreshing;
+        private UsageResult lastApiUsage;
+        private DateTime lastApiSuccessUtc = DateTime.MinValue;
+
+        public MeterAppContext()
+        {
+            cfg = Config.Load();
+
+            EnsureWidget();
+
+            // Capture the UI scheduler AFTER the widget has created its handle so
+            // ContinueWith callbacks marshal back onto the UI thread.
+            uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
+
+            placeTimer = new System.Windows.Forms.Timer();
+            placeTimer.Interval = 5000;
+            placeTimer.Tick += PlaceTimer_Tick;
+            placeTimer.Start();
+
+            dataTimer = new System.Windows.Forms.Timer();
+            dataTimer.Interval = Math.Max(5, cfg.refreshSec) * 1000;
+            dataTimer.Tick += DataTimer_Tick;
+            dataTimer.Start();
+
+            RefreshData();
+        }
+
+        private void PlaceTimer_Tick(object sender, EventArgs e)
+        {
+            EnsureWidget();
+        }
+
+        private void DataTimer_Tick(object sender, EventArgs e)
+        {
+            RefreshData();
+        }
+
+        private bool WidgetAlive()
+        {
+            return widget != null && !widget.IsDisposed;
+        }
+
+        private void EnsureWidget()
+        {
+            try
+            {
+                if (widget == null || widget.IsDisposed)
+                {
+                    widget = new WidgetForm(cfg, this);
+                    widget.Show();
+                    widget.SetUsage(lastUsage);
+                }
+                widget.UpdatePlacement();
+            }
+            catch
+            {
+            }
+        }
+
+        public void RefreshData()
+        {
+            if (refreshing)
+            {
+                return;
+            }
+            refreshing = true;
+
+            try
+            {
+                Task.Factory.StartNew(delegate
+                {
+                    return UsageReader.Read(cfg);
+                }).ContinueWith(delegate(Task<UsageResult> t)
+                {
+                    refreshing = false;
+                    try
+                    {
+                        if (t.Status == TaskStatus.RanToCompletion && t.Result != null)
+                        {
+                            UsageResult fresh = t.Result;
+                            if (fresh.FromApi)
+                            {
+                                // Fresh API data: cache it and display.
+                                lastApiUsage = fresh;
+                                lastApiSuccessUtc = DateTime.UtcNow;
+                                lastUsage = fresh;
+                            }
+                            else if (lastApiUsage != null &&
+                                     (DateTime.UtcNow - lastApiSuccessUtc).TotalMinutes < 30)
+                            {
+                                // API temporarily unavailable but we have recent cached data:
+                                // show the cache with a stale flag rather than the confusing local estimate.
+                                lastApiUsage.Stale = true;
+                                lastUsage = lastApiUsage;
+                            }
+                            else
+                            {
+                                // No usable API cache; fall back to local estimate.
+                                lastUsage = fresh;
+                            }
+
+                            if (WidgetAlive())
+                            {
+                                widget.SetUsage(lastUsage);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }, uiScheduler);
+            }
+            catch
+            {
+                refreshing = false;
+            }
+        }
+
+        public bool IsStartupEnabled()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKeyPath, false))
+                {
+                    if (key == null)
+                    {
+                        return false;
+                    }
+                    object val = key.GetValue(RunValueName);
+                    return val != null;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public void SetStartup(bool enable)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKeyPath))
+                {
+                    if (key == null)
+                    {
+                        return;
+                    }
+                    if (enable)
+                    {
+                        key.SetValue(RunValueName, "\"" + Application.ExecutablePath + "\"");
+                    }
+                    else
+                    {
+                        object existing = key.GetValue(RunValueName);
+                        if (existing != null)
+                        {
+                            key.DeleteValue(RunValueName, false);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        public void OpenConfig()
+        {
+            try
+            {
+                Process.Start("notepad.exe", "\"" + Config.ConfigPath + "\"");
+            }
+            catch
+            {
+            }
+        }
+
+        public void ReloadConfig()
+        {
+            try
+            {
+                Config fresh = Config.Load();
+                cfg.CopyFrom(fresh);
+                dataTimer.Interval = Math.Max(5, cfg.refreshSec) * 1000;
+                RefreshData();
+                if (WidgetAlive())
+                {
+                    widget.UpdatePlacement();
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        public void ExitApp()
+        {
+            try
+            {
+                if (placeTimer != null)
+                {
+                    placeTimer.Stop();
+                }
+                if (dataTimer != null)
+                {
+                    dataTimer.Stop();
+                }
+                if (WidgetAlive())
+                {
+                    widget.Close();
+                }
+            }
+            catch
+            {
+            }
+            ExitThread();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (placeTimer != null)
+                {
+                    placeTimer.Dispose();
+                }
+                if (dataTimer != null)
+                {
+                    dataTimer.Dispose();
+                }
+                if (widget != null && !widget.IsDisposed)
+                {
+                    widget.Dispose();
+                }
+            }
+            base.Dispose(disposing);
+        }
+    }
+}
