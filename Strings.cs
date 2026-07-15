@@ -17,6 +17,10 @@ namespace ClaudeTokenMeter
         // Value / reset text on the card.
         public static readonly string RemainingFmt =
             ja ? "残り {0}%" : "{0}% left";
+        // Title-row reset annotation (roomy long form). Drawn to the right of
+        // the title text, where there is always free horizontal space.
+        public static readonly string TitleResetFmt =
+            ja ? "リセット {0}" : "resets {0}";
         // Compact so it fits next to the value text; ↻ = resets at.
         public static readonly string ResetFmt =
             ja ? "↻ {0}" : "↻ {0}";

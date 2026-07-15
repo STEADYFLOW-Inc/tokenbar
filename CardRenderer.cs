@@ -73,6 +73,7 @@ namespace ClaudeTokenMeter
             if (titleVisible)
             {
                 DrawTitle(g, s);
+                DrawTitleAnnotation(g, cfg, usage, s);
             }
 
             DrawContent(g, cfg, usage, s, h, titleVisible);
@@ -144,6 +145,85 @@ namespace ClaudeTokenMeter
             using (SolidBrush titleBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
             {
                 g.DrawString(Strings.Title, titleFont, titleBrush, ContentX * s, 5f * s);
+            }
+        }
+
+        // Draws the reset-time (or cached-at) annotation on the title row,
+        // right-aligned in the free space to the right of the title text.
+        // Used by ALL layouts (single bar, multi, two-column) whenever the
+        // title is visible, so the reset time is shown consistently.
+        private static void DrawTitleAnnotation(Graphics g, Config cfg, UsageResult usage, float s)
+        {
+            if (!cfg.showResetTime)
+            {
+                return;
+            }
+            if (usage == null || !usage.FromApi)
+            {
+                return;
+            }
+
+            // Choose the annotation text and color. Stale cache wins: show the
+            // cached-at time (compact already) in amber-gray. Otherwise show the
+            // long-form reset time in gray, with a compact fallback if it won't fit.
+            string longText;
+            string compactText;
+            Color color;
+            if (usage.Stale)
+            {
+                string cachedAt = string.Format(
+                    CultureInfo.InvariantCulture,
+                    Strings.CachedAtFmt,
+                    usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
+                longText = cachedAt;
+                compactText = cachedAt; // already compact
+                color = Color.FromArgb(198, 168, 120);
+            }
+            else if (usage.SessionResetUtc.HasValue)
+            {
+                string local = usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm");
+                longText = string.Format(CultureInfo.InvariantCulture, Strings.TitleResetFmt, local);
+                compactText = string.Format(CultureInfo.InvariantCulture, Strings.ResetFmt, local);
+                color = Color.FromArgb(160, 160, 160);
+            }
+            else
+            {
+                return;
+            }
+
+            StringFormat tight = StringFormat.GenericTypographic;
+
+            // Measure the title text to find where it ends, so the annotation
+            // never overlaps it.
+            float titleEnd;
+            using (Font titleFont = new Font("Segoe UI", 10.5f * s, GraphicsUnit.Pixel))
+            {
+                SizeF titleSize = g.MeasureString(Strings.Title, titleFont, int.MaxValue, tight);
+                titleEnd = ContentX * s + titleSize.Width;
+            }
+
+            float rightEdge = (cfg.widgetWidth - 20f) * s;
+            float minStart = titleEnd + 6f * s;
+            float y = 6f * s;
+
+            using (Font annFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
+            using (SolidBrush annBrush = new SolidBrush(color))
+            {
+                SizeF longSize = g.MeasureString(longText, annFont, int.MaxValue, tight);
+                float longX = rightEdge - longSize.Width;
+                if (longX >= minStart)
+                {
+                    g.DrawString(longText, annFont, annBrush, longX, y, tight);
+                    return;
+                }
+
+                SizeF compactSize = g.MeasureString(compactText, annFont, int.MaxValue, tight);
+                float compactX = rightEdge - compactSize.Width;
+                if (compactX >= minStart)
+                {
+                    g.DrawString(compactText, annFont, annBrush, compactX, y, tight);
+                }
+                // Otherwise: not enough room; skip (tooltip carries it).
             }
         }
 
@@ -323,15 +403,18 @@ namespace ClaudeTokenMeter
             }
             else if (rows.Count <= capacityPerColumn)
             {
-                // Single-column multi-bar layout (unchanged).
-                DrawMultiBar(g, cfg, s, rows, barsTop, barsAreaH);
+                // Single-column multi-bar layout. When the title is hidden, a
+                // compact reset annotation occupies a right-side column.
+                float annInset = DrawMultiAnnotation(g, cfg, usage, s, titleVisible, barsTop, barsAreaH);
+                DrawMultiBar(g, cfg, s, rows, barsTop, barsAreaH, annInset);
             }
             else
             {
                 // Two-column layout. Show up to twice the per-column capacity.
                 int displayable = Math.Min(rows.Count, capacityPerColumn * 2);
                 int hidden = rows.Count - displayable;
-                DrawTwoColumnBars(g, cfg, s, rows, displayable, barsTop, barsAreaH);
+                float annInset = DrawMultiAnnotation(g, cfg, usage, s, titleVisible, barsTop, barsAreaH);
+                DrawTwoColumnBars(g, cfg, s, rows, displayable, barsTop, barsAreaH, annInset);
                 if (hidden > 0)
                 {
                     DrawHiddenCount(g, cfg, s, hidden, barsTop, barsAreaH);
@@ -372,13 +455,14 @@ namespace ClaudeTokenMeter
                 // Bar occupies the classic left portion; value text to its right.
                 float barW = 82f;
                 DrawBar(g, barX * s, barY * s, barW * s, barH * s, row.Fraction);
-                DrawSingleValueText(g, cfg, usage, s, row, (barX + barW + 6f));
+                DrawSingleValueText(g, cfg, usage, s, row, (barX + barW + 6f), titleVisible);
             }
             else
             {
                 // No value text: stretch bar across the full content width.
-                // Optionally reserve room for a compact reset annotation (API mode).
-                bool drawReset = cfg.showResetTime && row.ShowReset && row.ResetText != null;
+                // When the title is shown, the reset annotation lives on the title
+                // row; only draw the compact value-row annotation when it's hidden.
+                bool drawReset = !titleVisible && cfg.showResetTime && row.ShowReset && row.ResetText != null;
                 float barW = contentW;
                 if (drawReset)
                 {
@@ -395,7 +479,7 @@ namespace ClaudeTokenMeter
         }
 
         // Big value text (+ optional reset time) for the single-bar layout.
-        private static void DrawSingleValueText(Graphics g, Config cfg, UsageResult usage, float s, BarRow row, float valueXLogical)
+        private static void DrawSingleValueText(Graphics g, Config cfg, UsageResult usage, float s, BarRow row, float valueXLogical, bool titleVisible)
         {
             float valueX = valueXLogical * s;
             float valueY = 18.5f * s;
@@ -418,7 +502,9 @@ namespace ClaudeTokenMeter
             {
                 g.DrawString(valueText, valueFont, valueBrush, valueX, valueY);
 
-                if (cfg.showResetTime && row.ShowReset && row.ResetText != null)
+                // When the title is shown, the reset annotation lives on the
+                // title row; only draw the value-row annotation when it's hidden.
+                if (!titleVisible && cfg.showResetTime && row.ShowReset && row.ResetText != null)
                 {
                     // Right-align the annotation to the card's inner edge; skip
                     // it entirely when it would collide with the value text.
@@ -460,9 +546,66 @@ namespace ClaudeTokenMeter
             }
         }
 
+        // No-title multi-bar layouts have no title row to carry the reset time,
+        // so a compact annotation gets its own right-side column: drawn
+        // right-aligned ending at (widgetWidth - 8), vertically centered in the
+        // bars area. Returns the logical width the bar cells must give up
+        // (annotation width + 6 gap), or 0 when nothing is drawn.
+        private static float DrawMultiAnnotation(Graphics g, Config cfg, UsageResult usage, float s,
+            bool titleVisible, float barsTop, float barsAreaH)
+        {
+            if (titleVisible || !cfg.showResetTime)
+            {
+                return 0f;
+            }
+            if (usage == null || !usage.FromApi)
+            {
+                return 0f;
+            }
+
+            // Compact forms only (mirrors DrawTitleAnnotation's fallback):
+            // stale → cached-at "(H:mm)" in amber-gray; else reset "↻ H:mm" in gray.
+            string text;
+            Color color;
+            if (usage.Stale)
+            {
+                text = string.Format(
+                    CultureInfo.InvariantCulture,
+                    Strings.CachedAtFmt,
+                    usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
+                color = Color.FromArgb(198, 168, 120);
+            }
+            else if (usage.SessionResetUtc.HasValue)
+            {
+                text = string.Format(
+                    CultureInfo.InvariantCulture,
+                    Strings.ResetFmt,
+                    usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
+                color = Color.FromArgb(160, 160, 160);
+            }
+            else
+            {
+                return 0f;
+            }
+
+            StringFormat tight = StringFormat.GenericTypographic;
+            using (Font annFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
+            using (SolidBrush annBrush = new SolidBrush(color))
+            {
+                SizeF size = g.MeasureString(text, annFont, int.MaxValue, tight);
+                float rightEdge = (cfg.widgetWidth - 8f) * s;
+                float x = rightEdge - size.Width;
+                float y = (barsTop + barsAreaH / 2f) * s - size.Height / 2f;
+                g.DrawString(text, annFont, annBrush, x, y, tight);
+                return size.Width / s + 6f;
+            }
+        }
+
         // 2-N rows in a single column: [label][bar][pct]. Rows distributed evenly
-        // in barsAreaH. Reset time is intentionally omitted per-row (tooltip carries it).
-        private static void DrawMultiBar(Graphics g, Config cfg, float s, List<BarRow> rows, float barsTop, float barsAreaH)
+        // in barsAreaH. Reset time is omitted per-row; with the title hidden it
+        // lives in the right annotation column (rightInset > 0), otherwise on
+        // the title row. rightInset is the logical width reserved on the right.
+        private static void DrawMultiBar(Graphics g, Config cfg, float s, List<BarRow> rows, float barsTop, float barsAreaH, float rightInset)
         {
             int count = rows.Count;
             float rowH = barsAreaH / count;
@@ -471,7 +614,7 @@ namespace ClaudeTokenMeter
             float labelW = 26f;
             float pctW = cfg.showValueText ? 30f : 0f;
 
-            float contentW = cfg.widgetWidth - ContentX - ContentRightPad;
+            float contentW = cfg.widgetWidth - ContentX - ContentRightPad - rightInset;
 
             for (int i = 0; i < count; i++)
             {
@@ -489,11 +632,11 @@ namespace ClaudeTokenMeter
         // the RIGHT column holds the remainder. Both columns use the LEFT column's
         // row count for vertical distribution so rows align horizontally.
         private static void DrawTwoColumnBars(Graphics g, Config cfg, float s, List<BarRow> rows,
-            int displayable, float barsTop, float barsAreaH)
+            int displayable, float barsTop, float barsAreaH, float rightInset)
         {
             int leftCount = (displayable + 1) / 2; // ceil(displayable / 2)
 
-            float contentW = cfg.widgetWidth - ContentX - ContentRightPad;
+            float contentW = cfg.widgetWidth - ContentX - ContentRightPad - rightInset;
             float colW = (contentW - ColumnGap) / 2f;
 
             // Vertical distribution mirrors the single-column path but always uses
@@ -517,10 +660,11 @@ namespace ClaudeTokenMeter
                 float rowTop = barsTop + rowH * rowIndex;
                 float rowMid = rowTop + rowH / 2f;
 
-                // The source dot sits at ~(widgetWidth-12, 7) logical. The right
-                // column's top cell can reach that zone when the title is hidden
-                // and the first row starts high. Inset that one cell if needed.
-                bool insetForDot = (!inLeft) && rowIndex == 0 && (rowMid - rowH / 2f) < 12f;
+                // With the title visible the source dot sits at ~(widgetWidth-12, 7)
+                // logical; the right column's top cell can reach that zone when the
+                // first row starts high. Inset that one cell if needed. With the
+                // title hidden the dot is at the top-LEFT, so no inset is required.
+                bool insetForDot = cfg.showTitle && (!inLeft) && rowIndex == 0 && (rowMid - rowH / 2f) < 12f;
 
                 DrawBarCell(g, cfg, s, row, cellX, colW, rowMid, rowH,
                     labelW, pctW, cfg.showValueText, true, insetForDot);
@@ -655,7 +799,10 @@ namespace ClaudeTokenMeter
             }
         }
 
-        // Draws a small filled circle in the top-right interior of the card indicating the data source.
+        // Draws a small filled circle indicating the data source. Sits in the
+        // top-right interior of the card when the title is visible; moves to the
+        // top-LEFT (over the icon column) when the title is hidden, so it cannot
+        // collide with right-aligned pct text or the reset annotation column.
         private static void DrawSourceDot(Graphics g, Config cfg, UsageResult usage, float s)
         {
             Color dotColor;
@@ -677,7 +824,8 @@ namespace ClaudeTokenMeter
             }
 
             float diameter = 5f * s;
-            float dotX = (cfg.widgetWidth - 12f) * s - diameter / 2f;
+            float dotCenterX = cfg.showTitle ? (cfg.widgetWidth - 12f) : 7f;
+            float dotX = dotCenterX * s - diameter / 2f;
             float dotY = 7f * s - diameter / 2f;
             using (SolidBrush dotBrush = new SolidBrush(dotColor))
             {
