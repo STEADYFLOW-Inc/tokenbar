@@ -91,6 +91,8 @@ powershell -File build.ps1
 | `position` | `"right"` | ウィジェットを配置するタスクバー側。`"right"` = 時計の近く、`"left"` = スタートボタンの近く |
 | `offsetX` | `0` | 追加の水平オフセット（論理ピクセル、正値 = 中央方向に移動） |
 | `widgetWidth` | `240` | ウィジェット幅（論理ピクセル、有効範囲: 160〜400） |
+| `selectedModels` | `[]` | モデル別バーに表示するモデル名の配列。空 = API から取得した全モデル |
+| `monitor` | `0` | ウィジェットを表示するディスプレイ。`0` = プライマリ、それ以外は Windows のディスプレイ番号 |
 | `claudeDir` | `""` | `.claude` ディレクトリのパス。空の場合は `%USERPROFILE%\.claude` を使用 |
 | `embed` | （予約） | 表示方式フラグ（予約済み、変更不要） |
 | `showTitle` | `true` | タイトルテキストを表示する |

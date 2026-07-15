@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
@@ -35,6 +36,16 @@ namespace ClaudeTokenMeter
         private const int InputLeft = 150;
         private const int InputWidth = 150;
 
+        // Per-model selection layout.
+        private const int ModelIndentLeft = 36;   // indent under chkBarModels
+        private const int ModelRowHeight = 22;
+        private const int ModelHintHeight = 18;
+        // Bars group base height (3 top-level checkboxes + padding), before the
+        // hint label and any per-model rows are added below chkBarModels.
+        private const int BarsBaseHeight = 108;
+        // Max overall form height; realistic model count is 1-4 so this is a guard.
+        private const int MaxFormHeight = 700;
+
         private readonly Config cfg;
         private readonly MeterAppContext owner;
         private readonly Config snapshot;
@@ -51,9 +62,25 @@ namespace ClaudeTokenMeter
         private CheckBox chkBarWeekly;
         private CheckBox chkBarModels;
 
+        // Bars group + dynamic per-model selection.
+        private GroupBox barsGroup;
+        private Label lblModelsHint;
+        private Label lblModelsNone;
+        private readonly List<CheckBox> modelChecks = new List<CheckBox>();
+        // Joined snapshot of the model-name set the list was last built from,
+        // used to detect changes on the periodic status refresh.
+        private string lastModelNamesJoined = null;
+
+        // Controls below the bars group, re-flowed when the bars group grows.
+        private GroupBox layoutGroup;
+
         private NumericUpDown numWidth;
         private NumericUpDown numOffsetX;
         private ComboBox cmbPosition;
+        private ComboBox cmbMonitor;
+        // Parallel to cmbMonitor.Items: the display number each entry maps to
+        // (the primary entry stores 0 so selecting it writes cfg.monitor = 0).
+        private int[] monitorNumbers = new int[0];
         private NumericUpDown numTokenLimit;
         private NumericUpDown numRefreshSec;
 
@@ -126,8 +153,9 @@ namespace ClaudeTokenMeter
 
             y = displayGroup.Bottom + Pad;
 
-            // 2. Bars group.
-            GroupBox barsGroup = MakeGroup(Strings.SettingsBarsGroup, y, 108);
+            // 2. Bars group. Height is grown later by RebuildModelList to fit the
+            // per-model selection rows.
+            barsGroup = MakeGroup(Strings.SettingsBarsGroup, y, BarsBaseHeight);
             this.Controls.Add(barsGroup);
 
             chkBarSession = MakeCheck(Strings.SettingsBarSession, cfg.showSessionBar, 24);
@@ -136,14 +164,32 @@ namespace ClaudeTokenMeter
             chkBarSession.CheckedChanged += Bars_Changed;
             chkBarWeekly.CheckedChanged += Bars_Changed;
             chkBarModels.CheckedChanged += Bars_Changed;
+            // Toggling the per-model master checkbox enables/disables the model rows.
+            chkBarModels.CheckedChanged += BarModels_CheckedChanged;
             barsGroup.Controls.Add(chkBarSession);
             barsGroup.Controls.Add(chkBarWeekly);
             barsGroup.Controls.Add(chkBarModels);
 
+            // Hint label under chkBarModels (dim). The per-model checkboxes are
+            // (re)built by RebuildModelList, which also sets the group height.
+            lblModelsHint = new Label();
+            lblModelsHint.Text = Strings.SettingsModelsHint;
+            lblModelsHint.Font = new Font("Segoe UI", 8.5f);
+            lblModelsHint.ForeColor = TextDim;
+            lblModelsHint.BackColor = BackDark;
+            lblModelsHint.AutoSize = false;
+            lblModelsHint.Left = ModelIndentLeft;
+            lblModelsHint.Top = 24 + RowHeight * 3 + 2;
+            lblModelsHint.Width = barsGroup.Width - ModelIndentLeft - Pad;
+            lblModelsHint.Height = ModelHintHeight;
+            barsGroup.Controls.Add(lblModelsHint);
+
+            RebuildModelList();
+
             y = barsGroup.Bottom + Pad;
 
-            // 3. Layout group (width, offset, position, token limit, refresh).
-            GroupBox layoutGroup = MakeGroup(Strings.SettingsLayoutGroup, y, 24 + RowHeight * 5 + 8);
+            // 3. Layout group (width, offset, position, monitor, token limit, refresh).
+            layoutGroup = MakeGroup(Strings.SettingsLayoutGroup, y, 24 + RowHeight * 6 + 8);
             this.Controls.Add(layoutGroup);
 
             int ly = 24;
@@ -179,6 +225,21 @@ namespace ClaudeTokenMeter
             layoutGroup.Controls.Add(cmbPosition);
             ly += RowHeight;
 
+            Label lblMonitor = MakeLabel(Strings.SettingsMonitor, ly);
+            cmbMonitor = new ComboBox();
+            cmbMonitor.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbMonitor.FlatStyle = FlatStyle.Flat;
+            cmbMonitor.BackColor = InputBack;
+            cmbMonitor.ForeColor = TextLight;
+            cmbMonitor.Left = InputLeft;
+            cmbMonitor.Top = ly;
+            cmbMonitor.Width = InputWidth;
+            BuildMonitorItems();
+            cmbMonitor.SelectedIndexChanged += Monitor_Changed;
+            layoutGroup.Controls.Add(lblMonitor);
+            layoutGroup.Controls.Add(cmbMonitor);
+            ly += RowHeight;
+
             Label lblTokenLimit = MakeLabel(Strings.SettingsTokenLimit, ly);
             numTokenLimit = new NumericUpDown();
             numTokenLimit.Minimum = 10000;
@@ -201,8 +262,6 @@ namespace ClaudeTokenMeter
             layoutGroup.Controls.Add(lblRefresh);
             layoutGroup.Controls.Add(numRefreshSec);
 
-            y = layoutGroup.Bottom + Pad;
-
             // 4. Startup checkbox (standalone, below layout group).
             chkStartup = new CheckBox();
             chkStartup.Text = Strings.SettingsStartup;
@@ -211,19 +270,15 @@ namespace ClaudeTokenMeter
             chkStartup.BackColor = BackDark;
             chkStartup.FlatStyle = FlatStyle.Flat;
             chkStartup.Left = Pad + 4;
-            chkStartup.Top = y;
             chkStartup.Width = this.ClientSize.Width - Pad * 3;
             chkStartup.AutoSize = false;
             chkStartup.Height = 22;
             chkStartup.CheckedChanged += Startup_Changed;
             this.Controls.Add(chkStartup);
 
-            y = chkStartup.Bottom + Pad;
-
             // 5. Status footer: colored dot + source label.
             statusDot = new Panel();
             statusDot.Left = Pad + 2;
-            statusDot.Top = y + 2;
             statusDot.Width = 10;
             statusDot.Height = 10;
             statusDot.BackColor = DotGray;
@@ -232,30 +287,258 @@ namespace ClaudeTokenMeter
 
             statusLabel = new Label();
             statusLabel.Left = statusDot.Right + 8;
-            statusLabel.Top = y;
-            statusLabel.Width = this.ClientSize.Width - statusDot.Right - 8 - Pad;
             statusLabel.Height = 18;
+            statusLabel.Width = this.ClientSize.Width - statusDot.Right - 8 - Pad;
             statusLabel.ForeColor = TextDim;
             statusLabel.BackColor = BackDark;
             statusLabel.AutoSize = false;
             statusLabel.Text = Strings.SettingsSourceNone;
             this.Controls.Add(statusLabel);
 
-            // 6. Buttons (bottom-right).
+            // 6. Buttons (bottom-right). Positioned relative to ClientSize by
+            // RelayoutBelow so they track the (possibly grown) form height.
             btnCancel = MakeButton(Strings.SettingsCancel);
             btnCancel.DialogResult = DialogResult.Cancel;
-            btnCancel.Top = this.ClientSize.Height - btnCancel.Height - Pad;
-            btnCancel.Left = this.ClientSize.Width - btnCancel.Width - Pad;
             this.Controls.Add(btnCancel);
 
             btnOk = MakeButton(Strings.SettingsOK);
-            btnOk.Top = btnCancel.Top;
-            btnOk.Left = btnCancel.Left - btnOk.Width - 8;
             btnOk.Click += Ok_Click;
             this.Controls.Add(btnOk);
 
             this.AcceptButton = btnOk;
             this.CancelButton = btnCancel;
+
+            // Position the layout group and everything below it, and size the form.
+            RelayoutBelow();
+        }
+
+        // Positions the layout group, startup checkbox, status footer, and
+        // buttons relative to the (possibly grown) bars group, then sizes the
+        // form to fit. Safe to call repeatedly after the bars group height
+        // changes (e.g. when the per-model list is rebuilt).
+        private void RelayoutBelow()
+        {
+            if (layoutGroup == null)
+            {
+                return;
+            }
+
+            int y = barsGroup.Bottom + Pad;
+            layoutGroup.Top = y;
+
+            y = layoutGroup.Bottom + Pad;
+
+            if (chkStartup != null)
+            {
+                chkStartup.Top = y;
+                y = chkStartup.Bottom + Pad;
+            }
+
+            if (statusDot != null)
+            {
+                statusDot.Top = y + 2;
+            }
+            if (statusLabel != null)
+            {
+                statusLabel.Top = y;
+            }
+
+            y += 18 + Pad;
+
+            // Form height grows with the content; cap as a guard for many models.
+            int desiredHeight = y + 26 + Pad; // room for the button row + bottom pad.
+            if (desiredHeight > MaxFormHeight)
+            {
+                desiredHeight = MaxFormHeight;
+            }
+            this.ClientSize = new Size(this.ClientSize.Width, desiredHeight);
+
+            if (btnCancel != null)
+            {
+                btnCancel.Top = this.ClientSize.Height - btnCancel.Height - Pad;
+                btnCancel.Left = this.ClientSize.Width - btnCancel.Width - Pad;
+            }
+            if (btnOk != null && btnCancel != null)
+            {
+                btnOk.Top = btnCancel.Top;
+                btnOk.Left = btnCancel.Left - btnOk.Width - 8;
+            }
+        }
+
+        // --- Per-model selection ---
+
+        // Distinct, non-null model names from the latest usage snapshot, in
+        // first-seen order.
+        private List<string> GetAvailableModels()
+        {
+            List<string> models = new List<string>();
+            UsageResult u = owner.LastUsage;
+            if (u == null || u.ScopedLimits == null)
+            {
+                return models;
+            }
+            foreach (ScopedLimit sl in u.ScopedLimits)
+            {
+                if (sl == null || sl.Model == null)
+                {
+                    continue;
+                }
+                bool seen = false;
+                foreach (string existing in models)
+                {
+                    if (string.Equals(existing, sl.Model, StringComparison.OrdinalIgnoreCase))
+                    {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen)
+                {
+                    models.Add(sl.Model);
+                }
+            }
+            return models;
+        }
+
+        private static bool SelectedContains(string[] selected, string model)
+        {
+            if (selected == null)
+            {
+                return false;
+            }
+            foreach (string s in selected)
+            {
+                if (string.Equals(s, model, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // (Re)builds the indented per-model checkbox list (or the "none" label)
+        // under chkBarModels, grows the bars group to fit, and re-flows the
+        // controls below. Preserves the config-driven check state logic.
+        private void RebuildModelList()
+        {
+            bool wasInitializing = initializing;
+            initializing = true;
+            try
+            {
+                // Remove any previously built model checkboxes / none label.
+                foreach (CheckBox old in modelChecks)
+                {
+                    barsGroup.Controls.Remove(old);
+                    old.Dispose();
+                }
+                modelChecks.Clear();
+
+                if (lblModelsNone != null)
+                {
+                    barsGroup.Controls.Remove(lblModelsNone);
+                    lblModelsNone.Dispose();
+                    lblModelsNone = null;
+                }
+
+                List<string> models = GetAvailableModels();
+                lastModelNamesJoined = string.Join("", models.ToArray());
+
+                int rowTop = lblModelsHint.Bottom + 2;
+
+                if (models.Count == 0)
+                {
+                    lblModelsNone = new Label();
+                    lblModelsNone.Text = Strings.SettingsModelsNone;
+                    lblModelsNone.Font = new Font("Segoe UI", 8.5f);
+                    lblModelsNone.ForeColor = TextDim;
+                    lblModelsNone.BackColor = BackDark;
+                    lblModelsNone.AutoSize = false;
+                    lblModelsNone.Left = ModelIndentLeft;
+                    lblModelsNone.Top = rowTop;
+                    lblModelsNone.Width = barsGroup.Width - ModelIndentLeft - Pad;
+                    lblModelsNone.Height = ModelRowHeight;
+                    barsGroup.Controls.Add(lblModelsNone);
+                    rowTop = lblModelsNone.Bottom;
+                }
+                else
+                {
+                    bool selectAll = cfg.selectedModels == null || cfg.selectedModels.Length == 0;
+                    for (int i = 0; i < models.Count; i++)
+                    {
+                        string model = models[i];
+                        CheckBox chk = new CheckBox();
+                        chk.Text = model;
+                        chk.Checked = selectAll || SelectedContains(cfg.selectedModels, model);
+                        chk.ForeColor = TextLight;
+                        chk.BackColor = BackDark;
+                        chk.FlatStyle = FlatStyle.Flat;
+                        chk.AutoSize = false;
+                        chk.Left = ModelIndentLeft;
+                        chk.Top = rowTop;
+                        chk.Width = barsGroup.Width - ModelIndentLeft - Pad;
+                        chk.Height = ModelRowHeight;
+                        chk.Enabled = chkBarModels.Checked;
+                        chk.CheckedChanged += ModelCheck_Changed;
+                        barsGroup.Controls.Add(chk);
+                        modelChecks.Add(chk);
+                        rowTop += ModelRowHeight;
+                    }
+                }
+
+                // Grow the bars group to fit hint + rows.
+                barsGroup.Height = rowTop + Pad;
+
+                RelayoutBelow();
+            }
+            finally
+            {
+                initializing = wasInitializing;
+            }
+        }
+
+        // Master toggle: enable/disable the per-model checkboxes with chkBarModels.
+        private void BarModels_CheckedChanged(object sender, EventArgs e)
+        {
+            foreach (CheckBox chk in modelChecks)
+            {
+                chk.Enabled = chkBarModels.Checked;
+            }
+        }
+
+        // A per-model checkbox changed: rebuild cfg.selectedModels and preview.
+        private void ModelCheck_Changed(object sender, EventArgs e)
+        {
+            if (initializing)
+            {
+                return;
+            }
+            cfg.selectedModels = ComputeSelectedModels();
+            owner.PreviewSettings();
+        }
+
+        // Builds the selectedModels array from the current checkbox state.
+        // If every available model is checked, returns an empty array so future
+        // models are auto-included; otherwise the checked model names.
+        private string[] ComputeSelectedModels()
+        {
+            List<string> checkedNames = new List<string>();
+            bool allChecked = true;
+            foreach (CheckBox chk in modelChecks)
+            {
+                if (chk.Checked)
+                {
+                    checkedNames.Add(chk.Text);
+                }
+                else
+                {
+                    allChecked = false;
+                }
+            }
+            if (modelChecks.Count == 0 || allChecked)
+            {
+                return new string[0];
+            }
+            return checkedNames.ToArray();
         }
 
         private void BuildHeader(ref int y)
@@ -447,6 +730,62 @@ namespace ClaudeTokenMeter
             return value;
         }
 
+        // --- Monitor selector ---
+
+        // Populates cmbMonitor with one entry per Screen (AllScreens order) and
+        // fills the parallel monitorNumbers array. The primary screen's entry
+        // maps to 0 so selecting it writes cfg.monitor = 0. Selects the entry
+        // that matches cfg.monitor (primary when cfg.monitor <= 0).
+        private void BuildMonitorItems()
+        {
+            Screen[] screens = Screen.AllScreens;
+            monitorNumbers = new int[screens.Length];
+
+            int selectedIndex = 0;
+            for (int i = 0; i < screens.Length; i++)
+            {
+                Screen s = screens[i];
+                int displayNo = WidgetForm.GetDisplayNumber(s);
+                bool primary = s.Primary;
+
+                string label = string.Format(
+                    primary ? Strings.SettingsMonitorPrimaryFmt : Strings.SettingsMonitorFmt,
+                    displayNo);
+                cmbMonitor.Items.Add(label);
+
+                // Primary entry writes 0; secondary entries write their number.
+                monitorNumbers[i] = primary ? 0 : displayNo;
+
+                if (primary && cfg.monitor <= 0)
+                {
+                    selectedIndex = i;
+                }
+                else if (!primary && displayNo == cfg.monitor)
+                {
+                    selectedIndex = i;
+                }
+            }
+
+            if (cmbMonitor.Items.Count > 0)
+            {
+                cmbMonitor.SelectedIndex = selectedIndex;
+            }
+        }
+
+        private void Monitor_Changed(object sender, EventArgs e)
+        {
+            if (initializing)
+            {
+                return;
+            }
+            int idx = cmbMonitor.SelectedIndex;
+            if (idx >= 0 && idx < monitorNumbers.Length)
+            {
+                cfg.monitor = monitorNumbers[idx];
+                owner.PreviewSettings();
+            }
+        }
+
         // --- Live preview handlers ---
 
         private void Display_Changed(object sender, EventArgs e)
@@ -504,6 +843,15 @@ namespace ClaudeTokenMeter
         private void UpdateStatus()
         {
             UsageResult u = owner.LastUsage;
+
+            // If the set of available model names changed since the list was
+            // built, rebuild the per-model checkbox list.
+            List<string> currentModels = GetAvailableModels();
+            string currentJoined = string.Join("", currentModels.ToArray());
+            if (currentJoined != lastModelNamesJoined)
+            {
+                RebuildModelList();
+            }
 
             Color dot;
             string text;
@@ -592,9 +940,17 @@ namespace ClaudeTokenMeter
             cfg.showWeeklyBar = weekly;
             cfg.showModelBars = models;
 
+            // Ensure the per-model selection reflects the current checkbox state.
+            cfg.selectedModels = ComputeSelectedModels();
+
             cfg.widgetWidth = (int)numWidth.Value;
             cfg.offsetX = (int)numOffsetX.Value;
             cfg.position = cmbPosition.SelectedIndex == 1 ? "left" : "right";
+            if (cmbMonitor != null && cmbMonitor.SelectedIndex >= 0 &&
+                cmbMonitor.SelectedIndex < monitorNumbers.Length)
+            {
+                cfg.monitor = monitorNumbers[cmbMonitor.SelectedIndex];
+            }
             cfg.tokenLimit = (long)numTokenLimit.Value;
             cfg.refreshSec = (int)numRefreshSec.Value;
 

@@ -61,6 +61,10 @@ namespace ClaudeTokenMeter
             ja ? "週間（全体）" : "Weekly (all models)";
         public static readonly string SettingsBarModels =
             ja ? "週間（モデル別）" : "Weekly (per model)";
+        public static readonly string SettingsModelsNone =
+            ja ? "（モデル情報は API 取得後に表示されます）" : "(models appear after the first API fetch)";
+        public static readonly string SettingsModelsHint =
+            ja ? "表示するモデルを選択（未選択 = すべて）" : "Select models to show (none = all)";
         public static readonly string SettingsLayoutGroup =
             ja ? "レイアウト" : "Layout";
         public static readonly string SettingsWidth =
@@ -69,6 +73,12 @@ namespace ClaudeTokenMeter
             ja ? "水平オフセット" : "Horizontal offset";
         public static readonly string SettingsPosition =
             ja ? "位置" : "Position";
+        public static readonly string SettingsMonitor =
+            ja ? "モニター" : "Monitor";
+        public static readonly string SettingsMonitorPrimaryFmt =
+            ja ? "ディスプレイ {0}（プライマリ）" : "Display {0} (primary)";
+        public static readonly string SettingsMonitorFmt =
+            ja ? "ディスプレイ {0}" : "Display {0}";
         public static readonly string SettingsPositionRight =
             ja ? "右（時計側）" : "Right (near clock)";
         public static readonly string SettingsPositionLeft =

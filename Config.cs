@@ -15,6 +15,10 @@ namespace ClaudeTokenMeter
         public int offsetX = 0;
         public int widgetWidth = 240;
 
+        // Target display: 0 = primary display, otherwise the Windows display
+        // number (parsed from DeviceName "\\.\DISPLAYn").
+        public int monitor = 0;
+
         // Visibility toggles
         public bool showTitle = true;
         public bool showValueText = true;
@@ -24,6 +28,9 @@ namespace ClaudeTokenMeter
         public bool showSessionBar = true;
         public bool showWeeklyBar = false;
         public bool showModelBars = false;
+
+        // Per-model bar selection: empty = show all models.
+        public string[] selectedModels = new string[0];
 
         public string ResolveClaudeDir()
         {
@@ -62,8 +69,12 @@ namespace ClaudeTokenMeter
                         cfg.widgetWidth = 400;
                     if (cfg.position != "left")
                         cfg.position = "right";
+                    if (cfg.monitor < 0)
+                        cfg.monitor = 0;
                     if (!cfg.showSessionBar && !cfg.showWeeklyBar && !cfg.showModelBars)
                         cfg.showSessionBar = true;
+                    if (cfg.selectedModels == null)
+                        cfg.selectedModels = new string[0];
                     return cfg;
                 }
             }
@@ -103,12 +114,16 @@ namespace ClaudeTokenMeter
             position = other.position;
             offsetX = other.offsetX;
             widgetWidth = other.widgetWidth;
+            monitor = other.monitor;
             showTitle = other.showTitle;
             showValueText = other.showValueText;
             showResetTime = other.showResetTime;
             showSessionBar = other.showSessionBar;
             showWeeklyBar = other.showWeeklyBar;
             showModelBars = other.showModelBars;
+            selectedModels = (other.selectedModels != null)
+                ? (string[])other.selectedModels.Clone()
+                : new string[0];
         }
     }
 }

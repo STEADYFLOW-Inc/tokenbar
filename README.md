@@ -91,6 +91,8 @@ Refresh is also available in the right-click context menu.
 | `position` | `"right"` | Taskbar side — `"right"` places the widget near the clock; `"left"` near the Start button |
 | `offsetX` | `0` | Additional horizontal offset in logical pixels (positive = move toward center) |
 | `widgetWidth` | `240` | Widget width in logical pixels (valid range: 160–400) |
+| `selectedModels` | `[]` | Model names for per-model bars; empty = all models from the API |
+| `monitor` | `0` | Display to show the widget on — `0` = primary, otherwise the Windows display number |
 | `claudeDir` | `""` | Path to your `.claude` directory; empty = `%USERPROFILE%\.claude` |
 | `embed` | _(reserved)_ | Reserved display-mode flag; do not change |
 | `showTitle` | `true` | Show the card title text |

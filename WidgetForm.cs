@@ -331,11 +331,29 @@ namespace ClaudeTokenMeter
 
             if (cfg.showModelBars && fromApi && usage.ScopedLimits != null)
             {
+                bool filterActive = cfg.selectedModels != null && cfg.selectedModels.Length > 0;
                 foreach (ScopedLimit sl in usage.ScopedLimits)
                 {
                     if (rows.Count >= MaxBars)
                     {
                         break;
+                    }
+                    if (filterActive)
+                    {
+                        string slModel = (sl != null) ? sl.Model : null;
+                        bool matched = false;
+                        foreach (string sel in cfg.selectedModels)
+                        {
+                            if (string.Equals(slModel, sel, StringComparison.OrdinalIgnoreCase))
+                            {
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (!matched)
+                        {
+                            continue;
+                        }
                     }
                     rows.Add(BuildModelRow(sl));
                 }
@@ -818,25 +836,72 @@ namespace ClaudeTokenMeter
 
         // ---- Taskbar placement --------------------------------------------
 
+        // Parses the trailing integer from a screen device name
+        // ("\\.\DISPLAY3" -> 3). Returns 0 on failure.
+        public static int GetDisplayNumber(Screen s)
+        {
+            if (s == null || s.DeviceName == null)
+            {
+                return 0;
+            }
+            string name = s.DeviceName;
+            int i = name.Length;
+            while (i > 0 && name[i - 1] >= '0' && name[i - 1] <= '9')
+            {
+                i--;
+            }
+            if (i >= name.Length)
+            {
+                return 0;
+            }
+            int result;
+            if (int.TryParse(name.Substring(i), out result))
+            {
+                return result;
+            }
+            return 0;
+        }
+
+        // Resolves the Screen the widget should be placed on based on cfg.monitor.
+        // cfg.monitor <= 0 -> primary. Otherwise the AllScreens entry whose
+        // display number matches; falls back to primary.
+        private Screen ResolveTargetScreen()
+        {
+            if (cfg.monitor <= 0)
+            {
+                return Screen.PrimaryScreen;
+            }
+            Screen[] screens = Screen.AllScreens;
+            for (int i = 0; i < screens.Length; i++)
+            {
+                if (GetDisplayNumber(screens[i]) == cfg.monitor)
+                {
+                    return screens[i];
+                }
+            }
+            return Screen.PrimaryScreen;
+        }
+
         public void UpdatePlacement()
         {
             try
             {
-                if (ShouldHideForFullscreen())
+                Screen target = ResolveTargetScreen();
+
+                if (ShouldHideForFullscreen(target))
                 {
                     SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW);
                     return;
                 }
 
-                IntPtr tray = FindWindow("Shell_TrayWnd", null);
-                if (tray != IntPtr.Zero)
+                if (target.Primary)
                 {
-                    PlaceOverTaskbar(tray);
+                    PlaceOnPrimary(target);
                 }
                 else
                 {
-                    PlaceFallback();
+                    PlaceOnSecondary(target);
                 }
             }
             catch
@@ -845,7 +910,7 @@ namespace ClaudeTokenMeter
             Invalidate();
         }
 
-        private bool ShouldHideForFullscreen()
+        private bool ShouldHideForFullscreen(Screen target)
         {
             IntPtr fg = GetForegroundWindow();
             if (fg == IntPtr.Zero || fg == Handle)
@@ -874,9 +939,11 @@ namespace ClaudeTokenMeter
                 return false;
             }
 
-            Rectangle bounds = Screen.PrimaryScreen.Bounds;
-            return fr.left <= 0 && fr.top <= 0 &&
-                fr.right >= bounds.Width && fr.bottom >= bounds.Height;
+            // Compare against the absolute bounds of the target screen. Secondary
+            // screens have non-zero origins, so we cannot assume a (0,0) origin.
+            Rectangle bounds = target.Bounds;
+            return fr.left <= bounds.Left && fr.top <= bounds.Top &&
+                fr.right >= bounds.Right && fr.bottom >= bounds.Bottom;
         }
 
         private float ResolveScale(IntPtr hwnd)
@@ -901,24 +968,30 @@ namespace ClaudeTokenMeter
             }
         }
 
-        private void PlaceOverTaskbar(IntPtr tray)
+        // Primary display: place over Shell_TrayWnd, reserving the notification
+        // area (TrayNotifyWnd) on the right. Behavior is unchanged from the
+        // original single-monitor path; if the tray is missing we fall back.
+        private void PlaceOnPrimary(Screen target)
         {
+            IntPtr tray = FindWindow("Shell_TrayWnd", null);
+            if (tray == IntPtr.Zero)
+            {
+                PlaceFallback(target);
+                return;
+            }
+
             float sc = ResolveScale(tray);
             scale = sc;
 
             RECT trayRect;
             if (!GetWindowRect(tray, out trayRect))
             {
-                PlaceFallback();
+                PlaceFallback(target);
                 return;
             }
             int trayH = trayRect.bottom - trayRect.top;
 
-            int h = Math.Min((int)(40 * sc), trayH - (int)(4 * sc));
-            if (h < 20)
-            {
-                h = trayH;
-            }
+            int h = ComputeBarHeight(trayH, sc);
             int w = (int)(cfg.widgetWidth * sc);
 
             // All coordinates below are SCREEN coordinates.
@@ -952,7 +1025,95 @@ namespace ClaudeTokenMeter
                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
 
-        private void PlaceFallback()
+        // Secondary display: locate the Shell_SecondaryTrayWnd whose center lies
+        // inside the target screen. Secondary taskbars have no TrayNotifyWnd; the
+        // clock occupies ~150 logical px on the right, which we reserve.
+        private void PlaceOnSecondary(Screen target)
+        {
+            IntPtr secondary = FindSecondaryTray(target);
+            if (secondary == IntPtr.Zero)
+            {
+                PlaceFallback(target);
+                return;
+            }
+
+            float sc = ResolveScale(secondary);
+            scale = sc;
+
+            RECT trayRect;
+            if (!GetWindowRect(secondary, out trayRect))
+            {
+                PlaceFallback(target);
+                return;
+            }
+            int trayH = trayRect.bottom - trayRect.top;
+
+            int h = ComputeBarHeight(trayH, sc);
+            int w = (int)(cfg.widgetWidth * sc);
+
+            int x;
+            if (cfg.position == "left")
+            {
+                x = trayRect.left + (int)(8 * sc);
+            }
+            else
+            {
+                // Reserve the clock strip on the far right of the secondary bar.
+                int rightEdge = trayRect.right - (int)(150 * sc);
+                x = rightEdge - w - (int)(8 * sc);
+            }
+
+            x += (int)(cfg.offsetX * sc);
+            int y = trayRect.top + (trayH - h) / 2;
+
+            SetWindowPos(Handle, HWND_TOPMOST, x, y, w, h,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+
+        // Enumerates all Shell_SecondaryTrayWnd top-level windows and returns the
+        // one whose rect center falls inside the target screen's bounds.
+        private static IntPtr FindSecondaryTray(Screen target)
+        {
+            Rectangle bounds = target.Bounds;
+            IntPtr after = IntPtr.Zero;
+            while (true)
+            {
+                IntPtr h = FindWindowEx(IntPtr.Zero, after, "Shell_SecondaryTrayWnd", null);
+                if (h == IntPtr.Zero)
+                {
+                    break;
+                }
+                after = h;
+
+                RECT r;
+                if (GetWindowRect(h, out r))
+                {
+                    int cx = r.left + (r.right - r.left) / 2;
+                    int cy = r.top + (r.bottom - r.top) / 2;
+                    if (cx >= bounds.Left && cx < bounds.Right &&
+                        cy >= bounds.Top && cy < bounds.Bottom)
+                    {
+                        return h;
+                    }
+                }
+            }
+            return IntPtr.Zero;
+        }
+
+        // Shared bar-height computation used by both taskbar placement paths.
+        private static int ComputeBarHeight(int trayH, float sc)
+        {
+            int h = Math.Min((int)(40 * sc), trayH - (int)(4 * sc));
+            if (h < 20)
+            {
+                h = trayH;
+            }
+            return h;
+        }
+
+        // Overlay fallback on the given screen when no owning taskbar window is
+        // found (e.g. taskbar-on-all-displays disabled for a secondary screen).
+        private void PlaceFallback(Screen target)
         {
             float sc;
             using (Graphics g = CreateGraphics())
@@ -961,21 +1122,23 @@ namespace ClaudeTokenMeter
             }
             scale = sc;
 
-            Rectangle wa = Screen.PrimaryScreen.WorkingArea;
-            Rectangle sb = Screen.PrimaryScreen.Bounds;
+            Rectangle wa = target.WorkingArea;
+            Rectangle sb = target.Bounds;
             int w = (int)(cfg.widgetWidth * sc);
             int h = (int)(40 * sc);
 
             int y;
             if (sb.Bottom > wa.Bottom)
             {
+                // Center the widget in the strip between the working area and the
+                // screen bottom (the space a taskbar would occupy).
                 y = wa.Bottom + (sb.Bottom - wa.Bottom - h) / 2;
             }
             else
             {
-                y = sb.Bottom - h - (int)(8 * sc);
+                y = sb.Bottom - h - (int)(6 * sc);
             }
-            int x = sb.Right - w - (int)(220 * sc);
+            int x = wa.Right - w - (int)(8 * sc) + (int)(cfg.offsetX * sc);
 
             SetWindowPos(Handle, HWND_TOPMOST, x, y, w, h,
                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
