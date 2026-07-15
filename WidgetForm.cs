@@ -290,6 +290,7 @@ namespace ClaudeTokenMeter
             public string Label;
             public double Fraction;   // remaining fraction 0-1
             public string PctText;    // e.g. "42%"
+            public int PctValue;      // remaining percent as an integer
             public bool ShowReset;    // single-bar API reset annotation
             public string ResetText;
         }
@@ -347,6 +348,7 @@ namespace ClaudeTokenMeter
                 row.Fraction = Clamp01(remainingPct / 100.0);
                 int remainingInt = (int)Math.Round(remainingPct);
                 row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
+                row.PctValue = remainingInt;
                 if (usage.SessionResetUtc.HasValue)
                 {
                     row.ShowReset = true;
@@ -365,6 +367,7 @@ namespace ClaudeTokenMeter
                 row.Fraction = Clamp01(fraction);
                 int percent = (int)Math.Round(row.Fraction * 100.0);
                 row.PctText = percent.ToString(CultureInfo.InvariantCulture) + "%";
+                row.PctValue = percent;
             }
 
             return row;
@@ -610,14 +613,16 @@ namespace ClaudeTokenMeter
             float valueX = valueXLogical * s;
             float valueY = 18.5f * s;
 
+            string valueText = string.Format(
+                CultureInfo.InvariantCulture, Strings.RemainingFmt, row.PctValue);
             using (Font valueFont = new Font("Segoe UI", 12f * s, FontStyle.Bold, GraphicsUnit.Pixel))
             using (SolidBrush valueBrush = new SolidBrush(Color.FromArgb(255, 255, 255)))
             {
-                g.DrawString(row.PctText, valueFont, valueBrush, valueX, valueY);
+                g.DrawString(valueText, valueFont, valueBrush, valueX, valueY);
 
                 if (cfg.showResetTime && row.ShowReset && row.ResetText != null)
                 {
-                    SizeF valueSize = g.MeasureString(row.PctText, valueFont);
+                    SizeF valueSize = g.MeasureString(valueText, valueFont);
                     float resetX = valueX + valueSize.Width + 6f * s;
                     DrawResetSmall(g, s, row.ResetText, resetX / s, 18.5f);
                 }
