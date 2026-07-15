@@ -1,4 +1,4 @@
-# ClaudeTokenMeter build script (.NET Framework 4.8 in-box compiler, no SDK required)
+# TokenBar build script (.NET Framework 4.8 in-box compiler, no SDK required)
 $ErrorActionPreference = "Stop"
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $csc)) { throw ".NET Framework compiler not found: $csc" }
@@ -12,5 +12,5 @@ $refs = @(
     "/r:System.Web.Extensions.dll"
 )
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ /win32icon:app.ico /res:assets\claude_logo.png,claude_logo.png /out:ClaudeTokenMeter.exe @refs @src
-if ($LASTEXITCODE -eq 0) { Write-Host "Build OK: ClaudeTokenMeter.exe" } else { throw "Build failed ($LASTEXITCODE)" }
+& $csc /nologo /target:winexe /platform:x64 /optimize+ /win32icon:app.ico /res:assets\claude_logo.png,claude_logo.png /out:TokenBar.exe @refs @src
+if ($LASTEXITCODE -eq 0) { Write-Host "Build OK: TokenBar.exe" } else { throw "Build failed ($LASTEXITCODE)" }

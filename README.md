@@ -1,4 +1,4 @@
-# ClaudeTokenMeter
+# TokenBar
 
 A tiny Windows 11 taskbar widget that shows your remaining Claude Code usage at a glance.
 
@@ -35,7 +35,7 @@ A tiny Windows 11 taskbar widget that shows your remaining Claude Code usage at 
 
 ### Option A — Download the exe
 
-Download `ClaudeTokenMeter.exe` from the [Releases](../../releases) page and run it. That's all.
+Download `TokenBar.exe` from the [Releases](../../releases) page and run it. That's all.
 
 ### Option B — Build from source
 
@@ -49,7 +49,7 @@ Or invoke the compiler directly:
 
 ```powershell
 & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /platform:x64 /optimize+ `
-  /out:ClaudeTokenMeter.exe `
+  /out:TokenBar.exe `
   /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Web.Extensions.dll `
   Program.cs Config.cs UsageReader.cs ApiUsageReader.cs AppContext.cs WidgetForm.cs Strings.cs AssemblyInfo.cs
 ```
@@ -59,8 +59,8 @@ Or invoke the compiler directly:
 ## Usage
 
 ```powershell
-.\ClaudeTokenMeter.exe          # Start the widget (single-instance guard included)
-.\ClaudeTokenMeter.exe --dump   # Write a diagnostic dump.txt and exit
+.\TokenBar.exe          # Start the widget (single-instance guard included)
+.\TokenBar.exe --dump   # Write a diagnostic dump.txt and exit
 ```
 
 | Interaction | Action |
@@ -91,7 +91,7 @@ Or invoke the compiler directly:
 
 **Primary source — OAuth usage API**
 
-ClaudeTokenMeter calls:
+TokenBar calls:
 
 ```
 GET https://api.anthropic.com/api/oauth/usage
@@ -106,7 +106,7 @@ If the API call fails (offline, token expired, etc.), the widget scans `~/.claud
 
 **Rendering**
 
-Windows 11's XAML taskbar composites over classic `SetParent` child windows, making traditional taskbar embedding unreliable. ClaudeTokenMeter instead uses a **TOPMOST overlay** positioned precisely over the taskbar (the same technique used by ElevenClock). It monitors fullscreen state and hides automatically to avoid covering fullscreen applications.
+Windows 11's XAML taskbar composites over classic `SetParent` child windows, making traditional taskbar embedding unreliable. TokenBar instead uses a **TOPMOST overlay** positioned precisely over the taskbar (the same technique used by ElevenClock). It monitors fullscreen state and hides automatically to avoid covering fullscreen applications.
 
 ### Source file overview
 

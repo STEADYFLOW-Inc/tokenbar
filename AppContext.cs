@@ -9,7 +9,7 @@ namespace ClaudeTokenMeter
     public class MeterAppContext : ApplicationContext
     {
         private const string RunKeyPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-        private const string RunValueName = "ClaudeTokenMeter";
+        private const string RunValueName = "TokenBar";
 
         private readonly Config cfg;
         private readonly System.Windows.Forms.Timer placeTimer;

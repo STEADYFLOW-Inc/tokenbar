@@ -1,4 +1,4 @@
-# Contributing to ClaudeTokenMeter
+# Contributing to TokenBar
 
 ## How to Build
 

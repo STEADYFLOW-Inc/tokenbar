@@ -29,7 +29,7 @@ namespace ClaudeTokenMeter
             }
 
             bool createdNew;
-            using (var mutex = new Mutex(true, "ClaudeTokenMeter_SingleInstance", out createdNew))
+            using (var mutex = new Mutex(true, "TokenBar_SingleInstance", out createdNew))
             {
                 if (!createdNew)
                 {

@@ -50,7 +50,7 @@ namespace ClaudeTokenMeter
                 req.ReadWriteTimeout = 10000;
                 req.Headers["Authorization"] = "Bearer " + token;
                 req.Headers["anthropic-beta"] = "oauth-2025-04-20";
-                req.UserAgent = "ClaudeTokenMeter/1.0";
+                req.UserAgent = "TokenBar/1.0";
                 req.Accept = "application/json";
 
                 string body;
