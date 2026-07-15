@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-15
+
+### Added
+- Data-source indicator dot on the widget: green = live API, amber = cached (API temporarily unavailable), gray = local estimate, red = error
+- Settings window UX: live preview (changes apply to the widget instantly, Cancel reverts), header with logo and version, data-source status footer, start-with-Windows checkbox, fallback token-limit input
+- Hover feedback on the widget (hand cursor + highlight) to make it discoverable as clickable
+
 ## [1.1.1] - 2026-07-15
 
 ### Fixed

@@ -236,6 +236,11 @@ namespace ClaudeTokenMeter
             }
         }
 
+        public UsageResult LastUsage
+        {
+            get { return lastUsage; }
+        }
+
         public void ApplySettings()
         {
             try
@@ -247,6 +252,25 @@ namespace ClaudeTokenMeter
                     widget.Invalidate();
                 }
                 RefreshData();
+            }
+            catch
+            {
+            }
+        }
+
+        // Like ApplySettings but without cfg.Save side-effects and without
+        // RefreshData. Used for live preview from the settings dialog while it
+        // is open, so the widget updates in real time as controls change.
+        public void PreviewSettings()
+        {
+            try
+            {
+                dataTimer.Interval = Math.Max(5, cfg.refreshSec) * 1000;
+                if (WidgetAlive())
+                {
+                    widget.UpdatePlacement();
+                    widget.Invalidate();
+                }
             }
             catch
             {

@@ -43,6 +43,7 @@ namespace ClaudeTokenMeter
 
         private UsageResult usage;
         private float scale = 1f;
+        private bool hovered;
 
         public WidgetForm(Config cfg, MeterAppContext owner)
         {
@@ -66,6 +67,8 @@ namespace ClaudeTokenMeter
             Location = new Point(-3000, -3000);
             Size = new Size(LogicalWidth, LogicalHeight);
             BackColor = Color.FromArgb(32, 32, 32);
+
+            Cursor = Cursors.Hand;
 
             BuildContextMenu();
 
@@ -108,6 +111,20 @@ namespace ClaudeTokenMeter
             {
                 owner.OpenSettings();
             }
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            base.OnMouseEnter(e);
+            hovered = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            hovered = false;
+            Invalidate();
         }
 
         // ---- Context menu -------------------------------------------------
@@ -425,16 +442,19 @@ namespace ClaudeTokenMeter
             // Rounded card covering the client minus 1px.
             Rectangle card = new Rectangle(0, 0, Math.Max(1, w - 1), Math.Max(1, h - 1));
             float radius = 6f * s;
+            Color cardFill = hovered ? Color.FromArgb(52, 52, 52) : Color.FromArgb(45, 45, 45);
+            Color cardBorderColor = hovered ? Color.FromArgb(96, 96, 96) : Color.FromArgb(70, 70, 70);
             using (GraphicsPath cardPath = RoundedRect(card, radius))
             {
-                using (SolidBrush cardBrush = new SolidBrush(Color.FromArgb(45, 45, 45)))
+                using (SolidBrush cardBrush = new SolidBrush(cardFill))
                 {
                     g.FillPath(cardBrush, cardPath);
                 }
-                using (Pen cardBorder = new Pen(Color.FromArgb(70, 70, 70), 1f))
+                using (Pen cardBorder = new Pen(cardBorderColor, 1f))
                 {
                     g.DrawPath(cardBorder, cardPath);
                 }
+                DrawSourceDot(g, s);
             }
 
             DrawLogoIcon(g, s, h);
@@ -741,6 +761,36 @@ namespace ClaudeTokenMeter
                 new RectangleF(x, y, w, h), c1, c2, LinearGradientMode.Horizontal))
             {
                 g.FillPath(grad, fillPath);
+            }
+        }
+
+        // Draws a small filled circle in the top-right interior of the card indicating the data source.
+        private void DrawSourceDot(Graphics g, float s)
+        {
+            Color dotColor;
+            if (usage != null && usage.Error != null)
+            {
+                dotColor = Color.FromArgb(229, 83, 75);
+            }
+            else if (usage != null && usage.FromApi && !usage.Stale)
+            {
+                dotColor = Color.FromArgb(63, 185, 80);
+            }
+            else if (usage != null && usage.FromApi && usage.Stale)
+            {
+                dotColor = Color.FromArgb(210, 153, 34);
+            }
+            else
+            {
+                dotColor = Color.FromArgb(139, 148, 158);
+            }
+
+            float diameter = 5f * s;
+            float dotX = (cfg.widgetWidth - 12f) * s - diameter / 2f;
+            float dotY = 7f * s - diameter / 2f;
+            using (SolidBrush dotBrush = new SolidBrush(dotColor))
+            {
+                g.FillEllipse(dotBrush, dotX, dotY, diameter, diameter);
             }
         }
 

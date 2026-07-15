@@ -79,6 +79,20 @@ namespace ClaudeTokenMeter
             ja ? "OK" : "OK";
         public static readonly string SettingsCancel =
             ja ? "キャンセル" : "Cancel";
+        public static readonly string SettingsStartup =
+            ja ? "Windows 起動時に自動起動" : "Start with Windows";
+        public static readonly string SettingsTokenLimit =
+            ja ? "トークン上限（推計用）" : "Token limit (fallback)";
+        public static readonly string SettingsVersionFmt =
+            ja ? "TokenBar v{0}" : "TokenBar v{0}";
+        public static readonly string SettingsSourceApi =
+            ja ? "データ源: /usage API（正常）" : "Source: /usage API (live)";
+        public static readonly string SettingsSourceApiStale =
+            ja ? "データ源: API一時断・前回値を表示中" : "Source: API unavailable — cached data";
+        public static readonly string SettingsSourceLocal =
+            ja ? "データ源: ローカル推計（JSONL読み出し）" : "Source: local estimate (JSONL)";
+        public static readonly string SettingsSourceNone =
+            ja ? "データ源: 未取得" : "Source: no data yet";
 
         // Bar labels.
         public static readonly string BarLabelSession =
