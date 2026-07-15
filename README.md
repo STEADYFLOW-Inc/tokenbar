@@ -87,7 +87,7 @@ Refresh is also available in the right-click context menu.
 |-----|---------|-------------|
 | `tokenLimit` | `200000` | Used only by `--dump` / the tooltip local estimate; the meter always shows API data |
 | `includeCacheRead` | `false` | Used only by `--dump` / the tooltip local estimate; the meter always shows API data |
-| `refreshSec` | `60` | Data refresh interval in seconds |
+| `refreshSec` | `120` | Data refresh interval in seconds (lower values risk transient HTTP 429 on the shared usage endpoint) |
 | `position` | `"right"` | Taskbar side — `"right"` places the widget near the clock; `"left"` near the Start button |
 | `offsetX` | `0` | Additional horizontal offset in logical pixels (positive = move toward center) |
 | `widgetWidth` | `240` | Widget width in logical pixels (valid range: 160–400) |

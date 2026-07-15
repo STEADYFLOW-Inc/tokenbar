@@ -8,7 +8,9 @@ namespace ClaudeTokenMeter
     {
         public long tokenLimit = 200000;
         public bool includeCacheRead = false;
-        public int refreshSec = 60;
+        // 120s keeps the usage endpoint's shared rate limit comfortable
+        // (frequent polling can 429 both this widget and /usage itself).
+        public int refreshSec = 120;
         public bool embed = true;
         public string claudeDir = "";
         public string position = "right";
