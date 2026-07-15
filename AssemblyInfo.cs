@@ -4,6 +4,7 @@
 [assembly: AssemblyDescription("Claude Code usage meter for the Windows taskbar")]
 [assembly: AssemblyProduct("TokenBar")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 tsufupuru")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
+
 

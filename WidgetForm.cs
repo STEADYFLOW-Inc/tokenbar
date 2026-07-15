@@ -257,17 +257,21 @@ namespace ClaudeTokenMeter
                 {
                     api.Append("\r\n");
                     api.Append(Strings.TipStale);
+                    api.Append("\r\n");
+                    api.Append(string.Format(
+                        CultureInfo.InvariantCulture,
+                        Strings.TipCachedAtFmt,
+                        u.FetchedAtUtc.ToLocalTime().ToString("H:mm")));
                 }
                 api.Append(updatedLine);
                 return api.ToString();
             }
 
-            if (!u.Active)
-            {
-                return Strings.TipNoActiveBlock;
-            }
-
             StringBuilder sb = new StringBuilder();
+            // No API data has ever been cached: lead with the not-connected notice,
+            // then keep the local-estimate diagnostic lines that follow.
+            sb.Append(Strings.TipNoApiData);
+            sb.Append("\r\n");
             sb.Append(string.Format(
                 CultureInfo.InvariantCulture,
                 Strings.TipUsedFmt,
@@ -310,6 +314,7 @@ namespace ClaudeTokenMeter
             public int PctValue;      // remaining percent as an integer
             public bool ShowReset;    // single-bar API reset annotation
             public string ResetText;
+            public bool NoData;       // no API data at all -> render "—"
         }
 
         // Builds the ordered bar list from cfg + usage, capped at MaxBars.
@@ -384,7 +389,16 @@ namespace ClaudeTokenMeter
                 int remainingInt = (int)Math.Round(remainingPct);
                 row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
                 row.PctValue = remainingInt;
-                if (usage.SessionResetUtc.HasValue)
+                if (usage.Stale)
+                {
+                    // Stale cache: replace the reset time with the cached-at time.
+                    row.ShowReset = true;
+                    row.ResetText = string.Format(
+                        CultureInfo.InvariantCulture,
+                        Strings.CachedAtFmt,
+                        usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
+                }
+                else if (usage.SessionResetUtc.HasValue)
                 {
                     row.ShowReset = true;
                     row.ResetText = string.Format(
@@ -395,14 +409,11 @@ namespace ClaudeTokenMeter
             }
             else
             {
-                long limit = cfg.tokenLimit;
-                long used = (usage != null && usage.Active) ? usage.UsedTokens : 0L;
-                long remaining = Math.Max(0L, limit - used);
-                double fraction = limit > 0 ? (double)remaining / limit : 0.0;
-                row.Fraction = Clamp01(fraction);
-                int percent = (int)Math.Round(row.Fraction * 100.0);
-                row.PctText = percent.ToString(CultureInfo.InvariantCulture) + "%";
-                row.PctValue = percent;
+                // No API data has ever been cached: show a no-data placeholder.
+                row.NoData = true;
+                row.Fraction = 0.0;
+                row.PctText = "—";
+                row.PctValue = 0;
             }
 
             return row;
@@ -640,7 +651,7 @@ namespace ClaudeTokenMeter
                 if (drawReset)
                 {
                     float resetX = barX + barW + 6f;
-                    DrawResetSmall(g, s, row.ResetText, resetX, barY - 3f);
+                    DrawResetSmall(g, s, row.ResetText, resetX, barY - 3f, ResetTextColor(row));
                 }
             }
         }
@@ -651,6 +662,17 @@ namespace ClaudeTokenMeter
             float valueX = valueXLogical * s;
             float valueY = 18.5f * s;
 
+            // No API data: render a plain "—" in gray instead of "残り —%".
+            if (row.NoData)
+            {
+                using (Font naFont = new Font("Segoe UI", 12f * s, FontStyle.Bold, GraphicsUnit.Pixel))
+                using (SolidBrush naBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+                {
+                    g.DrawString("—", naFont, naBrush, valueX, valueY);
+                }
+                return;
+            }
+
             string valueText = string.Format(
                 CultureInfo.InvariantCulture, Strings.RemainingFmt, row.PctValue);
             using (Font valueFont = new Font("Segoe UI", 12f * s, FontStyle.Bold, GraphicsUnit.Pixel))
@@ -660,17 +682,41 @@ namespace ClaudeTokenMeter
 
                 if (cfg.showResetTime && row.ShowReset && row.ResetText != null)
                 {
-                    SizeF valueSize = g.MeasureString(valueText, valueFont);
-                    float resetX = valueX + valueSize.Width + 6f * s;
-                    DrawResetSmall(g, s, row.ResetText, resetX / s, 18.5f);
+                    // Right-align the annotation to the card's inner edge; skip
+                    // it entirely when it would collide with the value text.
+                    // GenericTypographic avoids MeasureString's ~15% padding.
+                    StringFormat tight = StringFormat.GenericTypographic;
+                    SizeF valueSize = g.MeasureString(valueText, valueFont, int.MaxValue, tight);
+                    float valueEnd = valueX + valueSize.Width;
+                    using (Font resetFont = new Font("Segoe UI", 9.5f * s, GraphicsUnit.Pixel))
+                    {
+                        SizeF resetSize = g.MeasureString(row.ResetText, resetFont, int.MaxValue, tight);
+                        float rightEdge = (cfg.widgetWidth - ContentRightPad) * s;
+                        float resetX = rightEdge - resetSize.Width - 2f * s;
+                        if (resetX >= valueEnd + 4f * s)
+                        {
+                            DrawResetSmall(g, s, row.ResetText, resetX / s, 18.5f, ResetTextColor(row));
+                        }
+                    }
                 }
             }
         }
 
-        private void DrawResetSmall(Graphics g, float s, string text, float xLogical, float yLogical)
+        // Amber-ish gray for a stale "as of HH:mm" label; plain gray otherwise.
+        private Color ResetTextColor(BarRow row)
+        {
+            bool stale = usage != null && usage.FromApi && usage.Stale;
+            if (stale)
+            {
+                return Color.FromArgb(198, 168, 120);
+            }
+            return Color.FromArgb(160, 160, 160);
+        }
+
+        private void DrawResetSmall(Graphics g, float s, string text, float xLogical, float yLogical, Color color)
         {
             using (Font resetFont = new Font("Segoe UI", 9.5f * s, GraphicsUnit.Pixel))
-            using (SolidBrush resetBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+            using (SolidBrush resetBrush = new SolidBrush(color))
             {
                 g.DrawString(text, resetFont, resetBrush, xLogical * s, yLogical * s);
             }

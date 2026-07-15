@@ -54,9 +54,16 @@ namespace ClaudeTokenMeter
             result.FetchedAtUtc = DateTime.UtcNow;
             try
             {
-                // Try the OAuth usage API first; on success it short-circuits JSONL estimation.
+                // 1. Try the OAuth usage API first; on success (live) it short-circuits.
                 if (ApiUsageReader.TryRead(cfg, result))
                     return result;
+
+                // 2. API unavailable: prefer the last successful API snapshot from disk.
+                //    We still run the local JSONL estimation below into the SAME result so
+                //    tooltip diagnostics (UsedTokens/Active/BlockStart) remain available;
+                //    the cached API fields + FromApi=true + Stale=true take precedence since
+                //    they occupy different fields than the local computation.
+                UsageCache.TryLoad(result);
 
                 string root = Path.Combine(cfg.ResolveClaudeDir(), "projects");
                 if (!Directory.Exists(root))

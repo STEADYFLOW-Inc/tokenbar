@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-15
+
+### Changed
+- The meter now always shows API data; the last good API result is persisted to disk and shown (labeled "as of HH:mm") during temporary API outages and across restarts
+- The local JSONL estimate no longer drives the meter (diagnostics/tooltip only); token-limit setting removed from the settings window
+- Faster recovery from rate limiting (429 backoff default 300s → 120s)
+
 ## [1.3.0] - 2026-07-15
 
 ### Added

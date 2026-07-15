@@ -79,7 +79,7 @@ namespace ClaudeTokenMeter
                             if (!string.IsNullOrEmpty(retryAfter) && int.TryParse(retryAfter, out parsed) && parsed > 0)
                                 backoffSec = Math.Min(Math.Max(parsed, 60), 1800);
                             else
-                                backoffSec = 300;
+                                backoffSec = 120;
                         }
                         else if (statusCode == 401 || statusCode == 403)
                         {
@@ -186,6 +186,10 @@ namespace ClaudeTokenMeter
                 }
 
                 result.FromApi = true;
+                // Persist this successful snapshot so it survives restarts and can be
+                // preferred over the local JSONL estimate during transient outages.
+                // result.FetchedAtUtc was set by UsageReader.Read at entry.
+                UsageCache.Save(result);
                 return true;
             }
             catch (Exception)

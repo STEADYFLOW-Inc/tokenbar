@@ -98,24 +98,39 @@ namespace ClaudeTokenMeter
                         if (t.Status == TaskStatus.RanToCompletion && t.Result != null)
                         {
                             UsageResult fresh = t.Result;
-                            if (fresh.FromApi)
+                            if (fresh.FromApi && !fresh.Stale)
                             {
-                                // Fresh API data: cache it and display.
+                                // Live API data: cache in-memory and display.
                                 lastApiUsage = fresh;
                                 lastApiSuccessUtc = DateTime.UtcNow;
                                 lastUsage = fresh;
                             }
-                            else if (lastApiUsage != null &&
-                                     (DateTime.UtcNow - lastApiSuccessUtc).TotalMinutes < 30)
+                            else if (fresh.FromApi && fresh.Stale)
                             {
-                                // API temporarily unavailable but we have recent cached data:
-                                // show the cache with a stale flag rather than the confusing local estimate.
+                                // Disk-cached API snapshot. It carries its own FetchedAtUtc, so
+                                // do NOT update lastApiSuccessUtc. Prefer whichever of the disk
+                                // snapshot and the in-memory snapshot is newer by FetchedAtUtc.
+                                if (lastApiUsage != null &&
+                                    lastApiUsage.FetchedAtUtc >= fresh.FetchedAtUtc)
+                                {
+                                    lastApiUsage.Stale = true;
+                                    lastUsage = lastApiUsage;
+                                }
+                                else
+                                {
+                                    lastUsage = fresh;
+                                }
+                            }
+                            else if (lastApiUsage != null)
+                            {
+                                // Local estimate only, but we still have prior API data in memory:
+                                // always prefer it (no 30-minute cutoff) with a stale flag.
                                 lastApiUsage.Stale = true;
                                 lastUsage = lastApiUsage;
                             }
                             else
                             {
-                                // No usable API cache; fall back to local estimate.
+                                // No usable API cache at all; fall back to local estimate.
                                 lastUsage = fresh;
                             }
 

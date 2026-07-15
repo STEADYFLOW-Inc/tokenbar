@@ -81,7 +81,6 @@ namespace ClaudeTokenMeter
         // Parallel to cmbMonitor.Items: the display number each entry maps to
         // (the primary entry stores 0 so selecting it writes cfg.monitor = 0).
         private int[] monitorNumbers = new int[0];
-        private NumericUpDown numTokenLimit;
         private NumericUpDown numRefreshSec;
 
         private CheckBox chkStartup;
@@ -188,8 +187,8 @@ namespace ClaudeTokenMeter
 
             y = barsGroup.Bottom + Pad;
 
-            // 3. Layout group (width, offset, position, monitor, token limit, refresh).
-            layoutGroup = MakeGroup(Strings.SettingsLayoutGroup, y, 24 + RowHeight * 6 + 8);
+            // 3. Layout group (width, offset, position, monitor, refresh).
+            layoutGroup = MakeGroup(Strings.SettingsLayoutGroup, y, 24 + RowHeight * 5 + 8);
             this.Controls.Add(layoutGroup);
 
             int ly = 24;
@@ -238,23 +237,6 @@ namespace ClaudeTokenMeter
             cmbMonitor.SelectedIndexChanged += Monitor_Changed;
             layoutGroup.Controls.Add(lblMonitor);
             layoutGroup.Controls.Add(cmbMonitor);
-            ly += RowHeight;
-
-            Label lblTokenLimit = MakeLabel(Strings.SettingsTokenLimit, ly);
-            numTokenLimit = new NumericUpDown();
-            numTokenLimit.Minimum = 10000;
-            numTokenLimit.Maximum = 10000000;
-            numTokenLimit.Increment = 10000;
-            numTokenLimit.ThousandsSeparator = true;
-            numTokenLimit.Value = ClampLong(cfg.tokenLimit, 10000, 10000000);
-            numTokenLimit.BackColor = InputBack;
-            numTokenLimit.ForeColor = TextLight;
-            numTokenLimit.BorderStyle = BorderStyle.FixedSingle;
-            numTokenLimit.Left = InputLeft;
-            numTokenLimit.Top = ly;
-            numTokenLimit.Width = InputWidth;
-            layoutGroup.Controls.Add(lblTokenLimit);
-            layoutGroup.Controls.Add(numTokenLimit);
             ly += RowHeight;
 
             Label lblRefresh = MakeLabel(Strings.SettingsRefreshSec, ly);
@@ -717,19 +699,6 @@ namespace ClaudeTokenMeter
             return value;
         }
 
-        private static decimal ClampLong(long value, long min, long max)
-        {
-            if (value < min)
-            {
-                return min;
-            }
-            if (value > max)
-            {
-                return max;
-            }
-            return value;
-        }
-
         // --- Monitor selector ---
 
         // Populates cmbMonitor with one entry per Screen (AllScreens order) and
@@ -951,7 +920,6 @@ namespace ClaudeTokenMeter
             {
                 cfg.monitor = monitorNumbers[cmbMonitor.SelectedIndex];
             }
-            cfg.tokenLimit = (long)numTokenLimit.Value;
             cfg.refreshSec = (int)numRefreshSec.Value;
 
             cfg.Save();

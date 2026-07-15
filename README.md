@@ -20,7 +20,7 @@ Multi-bar mode (5-hour session / weekly / per-model) and the settings window:
 - **Hover tooltip** — weekly usage (all models combined / per-model breakdown) with reset times.
 - **Settings window** (left-click) — toggle title, value text, and reset time visibility; choose which bars to show: 5-hour session, weekly (all models), or weekly per-model bars.
 - **Accurate data** — primary source is the same OAuth endpoint that Claude Code's `/usage` command uses (`GET https://api.anthropic.com/api/oauth/usage`), authenticated with the token already stored in `~/.claude/.credentials.json`.
-- **Automatic fallback** — when the API is unavailable, parses `~/.claude/projects/**/*.jsonl` transcripts and reconstructs the current 5-hour block (ccusage-style estimation).
+- **Automatic fallback** — the meter always shows API data. On a temporary API failure the last good API value stays on screen with an "as of HH:mm" label (persisted across restarts). The `~/.claude/projects/**/*.jsonl` local estimate (ccusage-style) is now diagnostics-only, surfaced in the tooltip and `--dump`.
 - **Auto-hides** during fullscreen apps so it never blocks a game or presentation.
 - **Survives Explorer restarts** — the widget reattaches automatically.
 - **Single instance** — a second copy exits immediately if one is already running.
@@ -85,8 +85,8 @@ Refresh is also available in the right-click context menu.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `tokenLimit` | `200000` | Token cap used by local-estimate (fallback) mode for the 5-hour block |
-| `includeCacheRead` | `false` | Whether to count `cache_read` tokens in the local estimate |
+| `tokenLimit` | `200000` | Used only by `--dump` / the tooltip local estimate; the meter always shows API data |
+| `includeCacheRead` | `false` | Used only by `--dump` / the tooltip local estimate; the meter always shows API data |
 | `refreshSec` | `60` | Data refresh interval in seconds |
 | `position` | `"right"` | Taskbar side — `"right"` places the widget near the clock; `"left"` near the Start button |
 | `offsetX` | `0` | Additional horizontal offset in logical pixels (positive = move toward center) |
@@ -153,7 +153,7 @@ Windows 11's XAML taskbar composites over classic `SetParent` child windows, mak
 |---------|--------------------|
 | Widget is not visible | Taskbar auto-hide may be covering it — move the cursor to the taskbar edge. Also check that a fullscreen app is not active. |
 | Widget shows an error message | Claude Code is not signed in, or `~/.claude/.credentials.json` is missing. Sign in to Claude Code and restart the widget. |
-| Percentages look wrong | The API is unavailable and the widget is in fallback mode. Set `tokenLimit` in `config.json` to match your account's actual 5-hour token limit. |
+| Percentages look wrong | Check the indicator dot: amber means the API is temporarily unavailable and the meter is showing the last good API value, labeled "as of HH:mm". The value refreshes automatically once the API responds again. |
 
 ---
 

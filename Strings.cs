@@ -17,8 +17,13 @@ namespace ClaudeTokenMeter
         // Value / reset text on the card.
         public static readonly string RemainingFmt =
             ja ? "残り {0}%" : "{0}% left";
+        // Compact so it fits next to the value text; ↻ = resets at.
         public static readonly string ResetFmt =
-            ja ? "リセット {0}" : "resets {0}";
+            ja ? "↻ {0}" : "↻ {0}";
+        // Stale-cache "as of HH:mm" annotation shown in place of the reset time.
+        // Kept minimal so it fits the widget; the tooltip carries the full text.
+        public static readonly string CachedAtFmt =
+            ja ? "({0})" : "({0})";
 
         // Local-estimate value text: remaining tokens (percent).
         public static readonly string LocalValueFmt =
@@ -121,6 +126,8 @@ namespace ClaudeTokenMeter
             ja ? "週間(全体): {0}% 使用" : "Weekly (all): {0}% used";
         public static readonly string TipWeeklyScopedFmt =
             ja ? "週間({0}): {1}% 使用" : "Weekly ({0}): {1}% used";
+        public static readonly string TipCachedAtFmt =
+            ja ? "取得時刻: {0}" : "fetched at {0}";
         public static readonly string TipSourceApi =
             ja ? "データ: /usage API" : "Source: /usage API";
         public static readonly string TipSourceLocal =
@@ -131,6 +138,9 @@ namespace ClaudeTokenMeter
             ja ? "アクティブなブロックなし（ローカル推計）" : "No active block (local estimate)";
         public static readonly string TipNoData =
             ja ? "アクティブなブロックなし" : "No active block";
+        // Leading tooltip line when no API data has ever been cached.
+        public static readonly string TipNoApiData =
+            ja ? "APIに未接続（データ取得待ち）" : "Not connected to the API yet";
         public static readonly string TipUsedFmt =
             ja ? "使用トークン: {0}" : "Used: {0} tokens";
         public static readonly string TipBlockStartFmt =
