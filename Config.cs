@@ -15,6 +15,16 @@ namespace ClaudeTokenMeter
         public int offsetX = 0;
         public int widgetWidth = 240;
 
+        // Visibility toggles
+        public bool showTitle = true;
+        public bool showValueText = true;
+        public bool showResetTime = true;
+
+        // Bar visibility
+        public bool showSessionBar = true;
+        public bool showWeeklyBar = false;
+        public bool showModelBars = false;
+
         public string ResolveClaudeDir()
         {
             if (!string.IsNullOrEmpty(claudeDir))
@@ -52,6 +62,8 @@ namespace ClaudeTokenMeter
                         cfg.widgetWidth = 400;
                     if (cfg.position != "left")
                         cfg.position = "right";
+                    if (!cfg.showSessionBar && !cfg.showWeeklyBar && !cfg.showModelBars)
+                        cfg.showSessionBar = true;
                     return cfg;
                 }
             }
@@ -91,6 +103,12 @@ namespace ClaudeTokenMeter
             position = other.position;
             offsetX = other.offsetX;
             widgetWidth = other.widgetWidth;
+            showTitle = other.showTitle;
+            showValueText = other.showValueText;
+            showResetTime = other.showResetTime;
+            showSessionBar = other.showSessionBar;
+            showWeeklyBar = other.showWeeklyBar;
+            showModelBars = other.showModelBars;
         }
     }
 }

@@ -6,12 +6,19 @@ A tiny Windows 11 taskbar widget that shows your remaining Claude Code usage at 
 
 ![screenshot](docs/screenshot.png)
 
+Multi-bar mode (5-hour session / weekly / per-model) and the settings window:
+
+![multi-bar](docs/multibar.png)
+
+![settings](docs/settings.png)
+
 ---
 
 ## Features
 
 - **Main display** — 5-hour session remaining % + progress bar + reset time, always visible on the taskbar.
 - **Hover tooltip** — weekly usage (all models combined / per-model breakdown) with reset times.
+- **Settings window** (left-click) — toggle title, value text, and reset time visibility; choose which bars to show: 5-hour session, weekly (all models), or weekly per-model bars.
 - **Accurate data** — primary source is the same OAuth endpoint that Claude Code's `/usage` command uses (`GET https://api.anthropic.com/api/oauth/usage`), authenticated with the token already stored in `~/.claude/.credentials.json`.
 - **Automatic fallback** — when the API is unavailable, parses `~/.claude/projects/**/*.jsonl` transcripts and reconstructs the current 5-hour block (ccusage-style estimation).
 - **Auto-hides** during fullscreen apps so it never blocks a game or presentation.
@@ -65,8 +72,10 @@ Or invoke the compiler directly:
 
 | Interaction | Action |
 |-------------|--------|
-| Left-click | Refresh data immediately |
-| Right-click | Context menu: Refresh / Open config / Reload config / Run at startup / Exit |
+| Left-click | Open the settings window |
+| Right-click | Context menu: Settings / Refresh / Open config / Reload config / Run at startup / Exit |
+
+Refresh is also available in the right-click context menu.
 
 ---
 
@@ -84,6 +93,12 @@ Or invoke the compiler directly:
 | `widgetWidth` | `240` | Widget width in logical pixels (valid range: 160–400) |
 | `claudeDir` | `""` | Path to your `.claude` directory; empty = `%USERPROFILE%\.claude` |
 | `embed` | _(reserved)_ | Reserved display-mode flag; do not change |
+| `showTitle` | `true` | Show the card title text |
+| `showValueText` | `true` | Show the numeric percentage / remaining-token text |
+| `showResetTime` | `true` | Show the reset time text below the bar |
+| `showSessionBar` | `true` | Show the 5-hour session progress bar |
+| `showWeeklyBar` | `false` | Show the weekly (all models) progress bar |
+| `showModelBars` | `false` | Show individual per-model weekly bars (one per model returned by the API) |
 
 ---
 

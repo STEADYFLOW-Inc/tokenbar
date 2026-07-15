@@ -122,13 +122,14 @@ namespace ClaudeTokenMeter
                     result.WeeklyResetUtc = ParseResetAt(sevenDay);
                 }
 
-                // limits array — find weekly_scoped entry
+                // limits array — collect all weekly_scoped entries
                 object limitsObj;
                 if (root.TryGetValue("limits", out limitsObj))
                 {
                     object[] limits = limitsObj as object[];
                     if (limits != null)
                     {
+                        bool firstScoped = true;
                         foreach (object item in limits)
                         {
                             Dictionary<string, object> limit = item as Dictionary<string, object>;
@@ -142,10 +143,8 @@ namespace ClaudeTokenMeter
                             if (kind != "weekly_scoped")
                                 continue;
 
-                            result.HasWeeklyScoped = true;
-                            result.WeeklyScopedPct = GetDouble(limit, "percent");
-
                             // null-safe navigation: scope -> model -> display_name
+                            string modelName = null;
                             Dictionary<string, object> scope = GetDict(limit, "scope");
                             if (scope != null)
                             {
@@ -157,15 +156,31 @@ namespace ClaudeTokenMeter
                                     {
                                         string displayName = displayNameObj as string;
                                         if (!string.IsNullOrEmpty(displayName))
-                                            result.WeeklyScopedModel = displayName;
+                                            modelName = displayName;
                                     }
                                 }
                             }
+                            if (string.IsNullOrEmpty(modelName))
+                                modelName = Strings.ScopedModelFallback;
 
-                            if (string.IsNullOrEmpty(result.WeeklyScopedModel))
-                                result.WeeklyScopedModel = Strings.ScopedModelFallback;
+                            double pct = GetDouble(limit, "percent");
 
-                            break;
+                            // First scoped entry populates the backward-compatible fields.
+                            if (firstScoped)
+                            {
+                                result.HasWeeklyScoped = true;
+                                result.WeeklyScopedPct = pct;
+                                result.WeeklyScopedModel = modelName;
+                                firstScoped = false;
+                            }
+
+                            // Accumulate into ScopedLimits list.
+                            if (result.ScopedLimits == null)
+                                result.ScopedLimits = new List<ScopedLimit>();
+                            ScopedLimit entry = new ScopedLimit();
+                            entry.Model = modelName;
+                            entry.Pct = pct;
+                            result.ScopedLimits.Add(entry);
                         }
                     }
                 }

@@ -6,6 +6,12 @@ using System.Web.Script.Serialization;
 
 namespace ClaudeTokenMeter
 {
+    public class ScopedLimit
+    {
+        public string Model;
+        public double Pct;
+    }
+
     public class UsageResult
     {
         public long UsedTokens;
@@ -24,6 +30,9 @@ namespace ClaudeTokenMeter
         public bool HasWeeklyScoped;
         public double WeeklyScopedPct;      // model-scoped weekly utilization 0-100
         public string WeeklyScopedModel;    // e.g. "Fable"
+
+        // All weekly_scoped entries (null when none); first entry mirrors HasWeeklyScoped/WeeklyScopedPct/WeeklyScopedModel.
+        public List<ScopedLimit> ScopedLimits;
 
         // Timestamp of when this result was produced.
         public DateTime FetchedAtUtc;

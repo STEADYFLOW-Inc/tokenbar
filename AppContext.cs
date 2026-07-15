@@ -16,6 +16,7 @@ namespace ClaudeTokenMeter
         private readonly System.Windows.Forms.Timer dataTimer;
         private TaskScheduler uiScheduler;
         private WidgetForm widget;
+        private SettingsForm settingsForm;
         private UsageResult lastUsage;
         private volatile bool refreshing;
         private UsageResult lastApiUsage;
@@ -213,6 +214,45 @@ namespace ClaudeTokenMeter
             }
         }
 
+        public void OpenSettings()
+        {
+            try
+            {
+                if (settingsForm != null && !settingsForm.IsDisposed)
+                {
+                    settingsForm.Activate();
+                    settingsForm.BringToFront();
+                    return;
+                }
+
+                // Show non-modal: a modal dialog from a NOACTIVATE widget can
+                // behave oddly, so a non-modal window is safer here.
+                settingsForm = new SettingsForm(cfg, this);
+                settingsForm.Show();
+                settingsForm.Activate();
+            }
+            catch
+            {
+            }
+        }
+
+        public void ApplySettings()
+        {
+            try
+            {
+                dataTimer.Interval = Math.Max(5, cfg.refreshSec) * 1000;
+                if (WidgetAlive())
+                {
+                    widget.UpdatePlacement();
+                    widget.Invalidate();
+                }
+                RefreshData();
+            }
+            catch
+            {
+            }
+        }
+
         public void ExitApp()
         {
             try
@@ -224,6 +264,10 @@ namespace ClaudeTokenMeter
                 if (dataTimer != null)
                 {
                     dataTimer.Stop();
+                }
+                if (settingsForm != null && !settingsForm.IsDisposed)
+                {
+                    settingsForm.Close();
                 }
                 if (WidgetAlive())
                 {
@@ -247,6 +291,10 @@ namespace ClaudeTokenMeter
                 if (dataTimer != null)
                 {
                     dataTimer.Dispose();
+                }
+                if (settingsForm != null && !settingsForm.IsDisposed)
+                {
+                    settingsForm.Dispose();
                 }
                 if (widget != null && !widget.IsDisposed)
                 {

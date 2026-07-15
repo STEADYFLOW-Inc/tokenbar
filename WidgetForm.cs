@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
@@ -16,6 +17,15 @@ namespace ClaudeTokenMeter
         // Logical layout units (multiplied by dpi scale s).
         private const int LogicalWidth = 240;
         private const int LogicalHeight = 40;
+
+        // Content geometry (logical units, right of the icon slot).
+        private const float ContentX = 31f;
+        private const float ContentRightPad = 8f;
+        private const float InnerPadTop = 4f;
+        private const float InnerPadBottom = 4f;
+        private const float TitleH = 13f;
+        private const int MaxBars = 3;
+        private const float MinRowH = 8f;
 
         // Win32 constants.
         private const int WS_EX_NOACTIVATE = 0x08000000;
@@ -96,7 +106,7 @@ namespace ClaudeTokenMeter
             }
             if (owner != null)
             {
-                owner.RefreshData();
+                owner.OpenSettings();
             }
         }
 
@@ -105,6 +115,9 @@ namespace ClaudeTokenMeter
         private void BuildContextMenu()
         {
             ContextMenuStrip menu = new ContextMenuStrip();
+
+            ToolStripMenuItem settingsItem = new ToolStripMenuItem(Strings.MenuSettings);
+            settingsItem.Click += delegate { if (owner != null) owner.OpenSettings(); };
 
             ToolStripMenuItem refreshItem = new ToolStripMenuItem(Strings.MenuRefresh);
             refreshItem.Click += delegate { if (owner != null) owner.RefreshData(); };
@@ -136,6 +149,8 @@ namespace ClaudeTokenMeter
                 }
             };
 
+            menu.Items.Add(settingsItem);
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(refreshItem);
             menu.Items.Add(openItem);
             menu.Items.Add(reloadItem);
@@ -265,6 +280,127 @@ namespace ClaudeTokenMeter
             return sb.ToString();
         }
 
+        // ---- Row model ----------------------------------------------------
+
+        // A single bar row: label + fill fraction (remaining 0-1) + optional
+        // percent text. ShowResetInline/ResetText drive the single-bar reset
+        // annotation only.
+        private sealed class BarRow
+        {
+            public string Label;
+            public double Fraction;   // remaining fraction 0-1
+            public string PctText;    // e.g. "42%"
+            public bool ShowReset;    // single-bar API reset annotation
+            public string ResetText;
+        }
+
+        // Builds the ordered bar list from cfg + usage, capped at MaxBars.
+        // Falls back to a synthesized session row if nothing else is visible.
+        private List<BarRow> BuildRows()
+        {
+            List<BarRow> rows = new List<BarRow>();
+            bool fromApi = usage != null && usage.FromApi;
+
+            if (cfg.showSessionBar)
+            {
+                rows.Add(BuildSessionRow(fromApi));
+            }
+
+            if (cfg.showWeeklyBar && fromApi)
+            {
+                rows.Add(BuildWeeklyRow());
+            }
+
+            if (cfg.showModelBars && fromApi && usage.ScopedLimits != null)
+            {
+                foreach (ScopedLimit sl in usage.ScopedLimits)
+                {
+                    if (rows.Count >= MaxBars)
+                    {
+                        break;
+                    }
+                    rows.Add(BuildModelRow(sl));
+                }
+            }
+
+            if (rows.Count > MaxBars)
+            {
+                rows.RemoveRange(MaxBars, rows.Count - MaxBars);
+            }
+
+            if (rows.Count == 0)
+            {
+                rows.Add(BuildSessionRow(fromApi));
+            }
+
+            return rows;
+        }
+
+        private BarRow BuildSessionRow(bool fromApi)
+        {
+            BarRow row = new BarRow();
+            row.Label = Strings.BarLabelSession;
+
+            if (fromApi)
+            {
+                double remainingPct = 100.0 - usage.SessionPct;
+                row.Fraction = Clamp01(remainingPct / 100.0);
+                int remainingInt = (int)Math.Round(remainingPct);
+                row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
+                if (usage.SessionResetUtc.HasValue)
+                {
+                    row.ShowReset = true;
+                    row.ResetText = string.Format(
+                        CultureInfo.InvariantCulture,
+                        Strings.ResetFmt,
+                        usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
+                }
+            }
+            else
+            {
+                long limit = cfg.tokenLimit;
+                long used = (usage != null && usage.Active) ? usage.UsedTokens : 0L;
+                long remaining = Math.Max(0L, limit - used);
+                double fraction = limit > 0 ? (double)remaining / limit : 0.0;
+                row.Fraction = Clamp01(fraction);
+                int percent = (int)Math.Round(row.Fraction * 100.0);
+                row.PctText = percent.ToString(CultureInfo.InvariantCulture) + "%";
+            }
+
+            return row;
+        }
+
+        private BarRow BuildWeeklyRow()
+        {
+            BarRow row = new BarRow();
+            row.Label = Strings.BarLabelWeekly;
+            double remainingPct = 100.0 - usage.WeeklyPct;
+            row.Fraction = Clamp01(remainingPct / 100.0);
+            int remainingInt = (int)Math.Round(remainingPct);
+            row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
+            return row;
+        }
+
+        private BarRow BuildModelRow(ScopedLimit sl)
+        {
+            BarRow row = new BarRow();
+            string model = (sl != null && sl.Model != null) ? sl.Model : Strings.ScopedModelFallback;
+            row.Label = model.Length > 5 ? model.Substring(0, 5) : model;
+            double pct = sl != null ? sl.Pct : 0.0;
+            double remainingPct = 100.0 - pct;
+            row.Fraction = Clamp01(remainingPct / 100.0);
+            int remainingInt = (int)Math.Round(remainingPct);
+            row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
+            return row;
+        }
+
+        private static double Clamp01(double v)
+        {
+            if (v < 0.0) return 0.0;
+            if (v > 1.0) return 1.0;
+            return v;
+        }
+
         // ---- Painting -----------------------------------------------------
 
         protected override void OnPaint(PaintEventArgs e)
@@ -299,8 +435,14 @@ namespace ClaudeTokenMeter
             }
 
             DrawLogoIcon(g, s, h);
-            DrawTitle(g, s);
-            DrawContent(g, s, h);
+
+            bool titleVisible = cfg.showTitle;
+            if (titleVisible)
+            {
+                DrawTitle(g, s);
+            }
+
+            DrawContent(g, s, h, titleVisible);
         }
 
         // Official Claude logo, embedded as a manifest resource ("claude_logo.png"
@@ -366,112 +508,216 @@ namespace ClaudeTokenMeter
             using (Font titleFont = new Font("Segoe UI", 10.5f * s, GraphicsUnit.Pixel))
             using (SolidBrush titleBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
             {
-                g.DrawString(Strings.Title, titleFont, titleBrush, 31f * s, 5f * s);
+                g.DrawString(Strings.Title, titleFont, titleBrush, ContentX * s, 5f * s);
             }
         }
 
-        private void DrawContent(Graphics g, float s, int h)
+        // Dispatches error / single-bar / multi-bar rendering.
+        private void DrawContent(Graphics g, float s, int h, bool titleVisible)
         {
             if (usage != null && usage.Error != null)
             {
-                using (Font errFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
-                using (SolidBrush errBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
-                {
-                    g.DrawString(usage.Error, errFont, errBrush, 31f * s, 18.5f * s);
-                }
+                DrawError(g, s, h, titleVisible);
                 return;
             }
 
-            if (usage != null && usage.FromApi)
+            List<BarRow> rows = BuildRows();
+
+            // Bars area in logical units.
+            float innerH = (h / s) - InnerPadTop - InnerPadBottom;
+            float barsAreaH = innerH - (titleVisible ? TitleH : 0f);
+            float barsTop = InnerPadTop + (titleVisible ? TitleH : 0f);
+
+            int barCount = rows.Count;
+            // Cap count further if rows would be too short.
+            while (barCount > 1 && (barsAreaH / barCount) < MinRowH)
             {
-                DrawApiContent(g, s);
-                return;
+                barCount--;
+            }
+            if (barCount < rows.Count)
+            {
+                rows.RemoveRange(barCount, rows.Count - barCount);
             }
 
-            long limit = cfg.tokenLimit;
-            long used = (usage != null && usage.Active) ? usage.UsedTokens : 0L;
-            long remaining = Math.Max(0L, limit - used);
-            double fraction = limit > 0 ? (double)remaining / limit : 0.0;
-            if (fraction < 0.0) fraction = 0.0;
-            if (fraction > 1.0) fraction = 1.0;
-            int percent = (int)Math.Round(fraction * 100.0);
-
-            DrawProgressBar(g, s, fraction);
-
-            using (Font valueFont = new Font("Segoe UI", 11f * s, FontStyle.Bold, GraphicsUnit.Pixel))
-            using (SolidBrush valueBrush = new SolidBrush(Color.FromArgb(240, 240, 240)))
+            if (rows.Count == 1)
             {
-                string text = string.Format(
-                    CultureInfo.InvariantCulture,
-                    Strings.LocalValueFmt,
-                    remaining.ToString("N0", CultureInfo.InvariantCulture),
-                    percent);
-                g.DrawString(text, valueFont, valueBrush, 120f * s, 18.5f * s);
+                DrawSingleBar(g, s, rows[0], titleVisible, barsTop, barsAreaH);
+            }
+            else
+            {
+                DrawMultiBar(g, s, rows, barsTop, barsAreaH);
             }
         }
 
-        private void DrawApiContent(Graphics g, float s)
+        private void DrawError(Graphics g, float s, int h, bool titleVisible)
         {
-            double remainingPct = 100.0 - usage.SessionPct;
-            double fraction = Math.Max(0.0, Math.Min(1.0, remainingPct / 100.0));
-            int remainingInt = (int)Math.Round(remainingPct);
+            float y = titleVisible ? 18.5f * s : (h - 9f * s) / 2f;
+            using (Font errFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
+            using (SolidBrush errBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+            {
+                g.DrawString(usage.Error, errFont, errBrush, ContentX * s, y);
+            }
+        }
 
-            DrawProgressBar(g, s, fraction);
+        // The classic single-bar look: bar left, value text right. Preserves the
+        // near-current layout when a title is shown; vertically centers otherwise.
+        private void DrawSingleBar(Graphics g, float s, BarRow row, bool titleVisible,
+            float barsTop, float barsAreaH)
+        {
+            float contentW = cfg.widgetWidth - ContentX - ContentRightPad;
+            float barX = ContentX;
+            float barH = titleVisible ? 7f : 8f;
+            float barY;
+            if (titleVisible)
+            {
+                barY = 22f;
+            }
+            else
+            {
+                barY = barsTop + (barsAreaH - barH) / 2f;
+            }
 
-            float valueX = 120f * s;
+            if (cfg.showValueText)
+            {
+                // Bar occupies the classic left portion; value text to its right.
+                float barW = 82f;
+                DrawBar(g, barX * s, barY * s, barW * s, barH * s, row.Fraction);
+                DrawSingleValueText(g, s, row, (barX + barW + 6f));
+            }
+            else
+            {
+                // No value text: stretch bar across the full content width.
+                // Optionally reserve room for a compact reset annotation (API mode).
+                bool drawReset = cfg.showResetTime && row.ShowReset && row.ResetText != null;
+                float barW = contentW;
+                if (drawReset)
+                {
+                    barW -= 46f;
+                }
+                DrawBar(g, barX * s, barY * s, barW * s, barH * s, row.Fraction);
+
+                if (drawReset)
+                {
+                    float resetX = barX + barW + 6f;
+                    DrawResetSmall(g, s, row.ResetText, resetX, barY - 3f);
+                }
+            }
+        }
+
+        // Big value text (+ optional reset time) for the single-bar layout.
+        private void DrawSingleValueText(Graphics g, float s, BarRow row, float valueXLogical)
+        {
+            float valueX = valueXLogical * s;
             float valueY = 18.5f * s;
-
-            string valueText = string.Format(
-                CultureInfo.InvariantCulture,
-                Strings.RemainingFmt,
-                remainingInt);
 
             using (Font valueFont = new Font("Segoe UI", 12f * s, FontStyle.Bold, GraphicsUnit.Pixel))
             using (SolidBrush valueBrush = new SolidBrush(Color.FromArgb(255, 255, 255)))
             {
-                g.DrawString(valueText, valueFont, valueBrush, valueX, valueY);
+                g.DrawString(row.PctText, valueFont, valueBrush, valueX, valueY);
 
-                if (usage.SessionResetUtc.HasValue)
+                if (cfg.showResetTime && row.ShowReset && row.ResetText != null)
                 {
-                    SizeF valueSize = g.MeasureString(valueText, valueFont);
+                    SizeF valueSize = g.MeasureString(row.PctText, valueFont);
                     float resetX = valueX + valueSize.Width + 6f * s;
-
-                    string resetText = string.Format(
-                        CultureInfo.InvariantCulture,
-                        Strings.ResetFmt,
-                        usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
-
-                    using (Font resetFont = new Font("Segoe UI", 9.5f * s, GraphicsUnit.Pixel))
-                    using (SolidBrush resetBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
-                    {
-                        g.DrawString(resetText, resetFont, resetBrush, resetX, valueY);
-                    }
+                    DrawResetSmall(g, s, row.ResetText, resetX / s, 18.5f);
                 }
             }
         }
 
-        private void DrawProgressBar(Graphics g, float s, double fraction)
+        private void DrawResetSmall(Graphics g, float s, string text, float xLogical, float yLogical)
         {
-            float bx = 31f * s;
-            float by = 22f * s;
-            float bw = 82f * s;
-            float bh = 7f * s;
-            float br = 3.5f * s;
+            using (Font resetFont = new Font("Segoe UI", 9.5f * s, GraphicsUnit.Pixel))
+            using (SolidBrush resetBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+            {
+                g.DrawString(text, resetFont, resetBrush, xLogical * s, yLogical * s);
+            }
+        }
 
-            RectangleF track = new RectangleF(bx, by, bw, bh);
-            using (GraphicsPath trackPath = RoundedRect(track, br))
+        // 2-3 rows: [label][bar][pct]. Rows distributed evenly in barsAreaH.
+        // Reset time is intentionally omitted per-row (tooltip carries it).
+        private void DrawMultiBar(Graphics g, float s, List<BarRow> rows, float barsTop, float barsAreaH)
+        {
+            int count = rows.Count;
+            float rowH = barsAreaH / count;
+
+            float labelW = 26f;
+            float pctW = cfg.showValueText ? 30f : 0f;
+            float gap = 4f;
+
+            float contentW = cfg.widgetWidth - ContentX - ContentRightPad;
+            float barX = ContentX + labelW + gap;
+            float barW = contentW - labelW - gap - (cfg.showValueText ? (gap + pctW) : 0f);
+            if (barW < 10f)
+            {
+                barW = 10f;
+            }
+            float barH = Math.Min(7f, rowH - 3f);
+            if (barH < 3f)
+            {
+                barH = 3f;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                BarRow row = rows[i];
+                float rowTop = barsTop + rowH * i;
+                float rowMid = rowTop + rowH / 2f;
+                float barY = rowMid - barH / 2f;
+
+                DrawMultiLabel(g, s, row.Label, ContentX, rowMid);
+                DrawBar(g, barX * s, barY * s, barW * s, barH * s, row.Fraction);
+
+                if (cfg.showValueText)
+                {
+                    DrawMultiPct(g, s, row.PctText, barX + barW + gap, pctW, rowMid);
+                }
+            }
+        }
+
+        private void DrawMultiLabel(Graphics g, float s, string label, float xLogical, float rowMidLogical)
+        {
+            using (Font labelFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
+            using (SolidBrush labelBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+            {
+                SizeF size = g.MeasureString(label, labelFont);
+                float y = rowMidLogical * s - size.Height / 2f;
+                g.DrawString(label, labelFont, labelBrush, xLogical * s, y);
+            }
+        }
+
+        private void DrawMultiPct(Graphics g, float s, string pctText, float xLogical, float widthLogical, float rowMidLogical)
+        {
+            using (Font pctFont = new Font("Segoe UI", 9.5f * s, FontStyle.Bold, GraphicsUnit.Pixel))
+            using (SolidBrush pctBrush = new SolidBrush(Color.FromArgb(240, 240, 240)))
+            {
+                SizeF size = g.MeasureString(pctText, pctFont);
+                float y = rowMidLogical * s - size.Height / 2f;
+                float rightEdge = (xLogical + widthLogical) * s;
+                float x = rightEdge - size.Width;
+                g.DrawString(pctText, pctFont, pctBrush, x, y);
+            }
+        }
+
+        // Draws a rounded progress bar at the given pixel rect. Preserves the
+        // green gradient / orange-red under-20% behavior of the original.
+        private void DrawBar(Graphics g, float x, float y, float w, float h, double fraction)
+        {
+            float r = h / 2f;
+
+            RectangleF track = new RectangleF(x, y, w, h);
+            using (GraphicsPath trackPath = RoundedRect(track, r))
             using (SolidBrush trackBrush = new SolidBrush(Color.FromArgb(74, 74, 74)))
             {
                 g.FillPath(trackBrush, trackPath);
             }
 
-            float fillW = (float)(bw * fraction);
+            float fillW = (float)(w * fraction);
             if (fillW < 1f)
             {
                 return;
             }
 
-            RectangleF fillRect = new RectangleF(bx, by, fillW, bh);
+            RectangleF fillRect = new RectangleF(x, y, fillW, h);
             Color c1;
             Color c2;
             if (fraction < 0.2)
@@ -485,9 +731,9 @@ namespace ClaudeTokenMeter
                 c2 = Color.FromArgb(120, 224, 143);
             }
 
-            using (GraphicsPath fillPath = RoundedRect(fillRect, Math.Min(br, fillW / 2f)))
+            using (GraphicsPath fillPath = RoundedRect(fillRect, Math.Min(r, fillW / 2f)))
             using (LinearGradientBrush grad = new LinearGradientBrush(
-                new RectangleF(bx, by, bw, bh), c1, c2, LinearGradientMode.Horizontal))
+                new RectangleF(x, y, w, h), c1, c2, LinearGradientMode.Horizontal))
             {
                 g.FillPath(grad, fillPath);
             }

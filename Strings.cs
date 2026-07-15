@@ -29,6 +29,8 @@ namespace ClaudeTokenMeter
             ja ? "モデル別" : "per-model";
 
         // Context menu captions.
+        public static readonly string MenuSettings =
+            ja ? "設定..." : "Settings...";
         public static readonly string MenuRefresh =
             ja ? "今すぐ更新" : "Refresh now";
         public static readonly string MenuOpenConfig =
@@ -39,6 +41,50 @@ namespace ClaudeTokenMeter
             ja ? "スタートアップに登録" : "Run at startup";
         public static readonly string MenuExit =
             ja ? "終了" : "Exit";
+
+        // Settings window.
+        public static readonly string SettingsTitle =
+            ja ? "TokenBar 設定" : "TokenBar Settings";
+        public static readonly string SettingsDisplayGroup =
+            ja ? "表示" : "Display";
+        public static readonly string SettingsShowTitle =
+            ja ? "タイトルを表示" : "Show title";
+        public static readonly string SettingsShowValueText =
+            ja ? "数値テキストを表示" : "Show value text";
+        public static readonly string SettingsShowResetTime =
+            ja ? "リセット時刻を表示" : "Show reset time";
+        public static readonly string SettingsBarsGroup =
+            ja ? "バー" : "Bars";
+        public static readonly string SettingsBarSession =
+            ja ? "5時間セッション" : "5-hour session";
+        public static readonly string SettingsBarWeekly =
+            ja ? "週間（全体）" : "Weekly (all models)";
+        public static readonly string SettingsBarModels =
+            ja ? "週間（モデル別）" : "Weekly (per model)";
+        public static readonly string SettingsLayoutGroup =
+            ja ? "レイアウト" : "Layout";
+        public static readonly string SettingsWidth =
+            ja ? "幅" : "Width";
+        public static readonly string SettingsOffsetX =
+            ja ? "水平オフセット" : "Horizontal offset";
+        public static readonly string SettingsPosition =
+            ja ? "位置" : "Position";
+        public static readonly string SettingsPositionRight =
+            ja ? "右（時計側）" : "Right (near clock)";
+        public static readonly string SettingsPositionLeft =
+            ja ? "左（スタート側）" : "Left (near Start)";
+        public static readonly string SettingsRefreshSec =
+            ja ? "更新間隔（秒）" : "Refresh interval (sec)";
+        public static readonly string SettingsOK =
+            ja ? "OK" : "OK";
+        public static readonly string SettingsCancel =
+            ja ? "キャンセル" : "Cancel";
+
+        // Bar labels.
+        public static readonly string BarLabelSession =
+            ja ? "5h" : "5h";
+        public static readonly string BarLabelWeekly =
+            ja ? "週" : "wk";
 
         // Tooltip lines (API source).
         public static readonly string TipSessionFmt =
