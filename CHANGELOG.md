@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-15
+
+### Added
+- First-run quick setup wizard: choose the Claude directory (with live credential validation), monitor, taskbar position, and startup registration on first launch
+- Live widget preview inside the settings window — every toggle is reflected instantly in a rendered mock of the actual card
+- Visual monitor picker (Windows display-settings style): click a screen rectangle to move the widget there
+
+### Changed
+- Widget card rendering extracted into a shared CardRenderer used by both the taskbar widget and the settings preview
+
 ## [1.4.1] - 2026-07-15
 
 ### Changed

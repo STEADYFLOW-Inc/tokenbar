@@ -50,6 +50,8 @@ namespace ClaudeTokenMeter
         // Settings window.
         public static readonly string SettingsTitle =
             ja ? "TokenBar 設定" : "TokenBar Settings";
+        public static readonly string SettingsPreview =
+            ja ? "プレビュー" : "Preview";
         public static readonly string SettingsDisplayGroup =
             ja ? "表示" : "Display";
         public static readonly string SettingsShowTitle =
@@ -108,6 +110,32 @@ namespace ClaudeTokenMeter
             ja ? "データ源: ローカル推計（JSONL読み出し）" : "Source: local estimate (JSONL)";
         public static readonly string SettingsSourceNone =
             ja ? "データ源: 未取得" : "Source: no data yet";
+
+        // Quick-setup wizard (first run).
+        public static readonly string SetupTitle =
+            ja ? "TokenBar 簡単セットアップ" : "TokenBar Quick Setup";
+        public static readonly string SetupWelcome =
+            ja
+                ? "ようこそ！最初に基本設定を確認してください。\nすべて後から設定画面（ウィジェットを左クリック）で変更できます。"
+                : "Welcome! Review the basics below.\nEverything can be changed later from the settings window (left-click the widget).";
+        public static readonly string SetupClaudeDir =
+            ja ? "Claude ディレクトリ" : "Claude directory";
+        public static readonly string SetupBrowse =
+            ja ? "参照..." : "Browse...";
+        public static readonly string SetupCredOk =
+            ja ? "✓ 認証情報を確認できました" : "✓ Credentials found";
+        public static readonly string SetupCredMissing =
+            ja
+                ? "⚠ .credentials.json が見つかりません（Claude Code にログインしてください）"
+                : "⚠ .credentials.json not found (sign in to Claude Code)";
+        public static readonly string SetupMonitorLabel =
+            ja ? "表示するモニター（クリックで選択）" : "Monitor to show the widget on (click to select)";
+        public static readonly string SetupPositionLabel =
+            ja ? "タスクバー上の位置" : "Position on the taskbar";
+        public static readonly string SetupStartup =
+            ja ? "Windows 起動時に自動起動する（推奨）" : "Start with Windows (recommended)";
+        public static readonly string SetupStart =
+            ja ? "開始" : "Start";
 
         // Bar labels.
         public static readonly string BarLabelSession =

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Windows.Forms;
@@ -44,7 +45,8 @@ namespace ClaudeTokenMeter
         // hint label and any per-model rows are added below chkBarModels.
         private const int BarsBaseHeight = 108;
         // Max overall form height; realistic model count is 1-4 so this is a guard.
-        private const int MaxFormHeight = 700;
+        // Must leave room for preview (48) + monitor picker (92) + all groups.
+        private const int MaxFormHeight = 860;
 
         private readonly Config cfg;
         private readonly MeterAppContext owner;
@@ -77,11 +79,12 @@ namespace ClaudeTokenMeter
         private NumericUpDown numWidth;
         private NumericUpDown numOffsetX;
         private ComboBox cmbPosition;
-        private ComboBox cmbMonitor;
-        // Parallel to cmbMonitor.Items: the display number each entry maps to
-        // (the primary entry stores 0 so selecting it writes cfg.monitor = 0).
-        private int[] monitorNumbers = new int[0];
+        private MonitorPicker monitorPicker;
         private NumericUpDown numRefreshSec;
+
+        // Live widget preview (mirrors the on-taskbar widget card).
+        private Label previewCaption;
+        private BufferedPanel previewPanel;
 
         private CheckBox chkStartup;
 
@@ -91,6 +94,18 @@ namespace ClaudeTokenMeter
 
         private Button btnOk;
         private Button btnCancel;
+
+        // A double-buffered Panel used for flicker-free custom painting (the live
+        // widget preview and the monitor picker draw continuously as settings
+        // change). ResizeRedraw so a size change repaints the whole surface.
+        private sealed class BufferedPanel : Panel
+        {
+            public BufferedPanel()
+            {
+                DoubleBuffered = true;
+                ResizeRedraw = true;
+            }
+        }
 
         public SettingsForm(Config cfg, MeterAppContext owner)
         {
@@ -135,6 +150,31 @@ namespace ClaudeTokenMeter
 
             // 0. Header: logo + product name + version.
             BuildHeader(ref y);
+
+            // 0.5 Live widget preview: a dim caption + a custom-painted panel
+            // that mirrors the on-taskbar widget card in real time.
+            previewCaption = new Label();
+            previewCaption.Text = Strings.SettingsPreview;
+            previewCaption.Font = new Font("Segoe UI", 8.5f);
+            previewCaption.ForeColor = TextDim;
+            previewCaption.BackColor = BackDark;
+            previewCaption.AutoSize = false;
+            previewCaption.Left = Pad;
+            previewCaption.Top = y;
+            previewCaption.Width = this.ClientSize.Width - Pad * 2;
+            previewCaption.Height = 16;
+            this.Controls.Add(previewCaption);
+            y = previewCaption.Bottom + 2;
+
+            previewPanel = new BufferedPanel();
+            previewPanel.Left = Pad;
+            previewPanel.Top = y;
+            previewPanel.Width = this.ClientSize.Width - Pad * 2;
+            previewPanel.Height = 48;
+            previewPanel.BackColor = Color.FromArgb(24, 24, 24);
+            previewPanel.Paint += PreviewPanel_Paint;
+            this.Controls.Add(previewPanel);
+            y = previewPanel.Bottom + Pad;
 
             // 1. Display group.
             GroupBox displayGroup = MakeGroup(Strings.SettingsDisplayGroup, y, 108);
@@ -187,8 +227,12 @@ namespace ClaudeTokenMeter
 
             y = barsGroup.Bottom + Pad;
 
-            // 3. Layout group (width, offset, position, monitor, refresh).
-            layoutGroup = MakeGroup(Strings.SettingsLayoutGroup, y, 24 + RowHeight * 5 + 8);
+            // 3. Layout group (width, offset, position, monitor picker, refresh).
+            // Base height covers the 4 combo/numeric rows + the monitor label +
+            // the ~92px picker + bottom padding.
+            const int MonitorPickerHeight = 92;
+            layoutGroup = MakeGroup(Strings.SettingsLayoutGroup, y,
+                24 + RowHeight * 4 + 20 + MonitorPickerHeight + 8);
             this.Controls.Add(layoutGroup);
 
             int ly = 24;
@@ -224,20 +268,22 @@ namespace ClaudeTokenMeter
             layoutGroup.Controls.Add(cmbPosition);
             ly += RowHeight;
 
+            // Monitor: a full-width visual picker (Windows display-settings style)
+            // instead of a combo. Label on its own line, picker spanning below.
             Label lblMonitor = MakeLabel(Strings.SettingsMonitor, ly);
-            cmbMonitor = new ComboBox();
-            cmbMonitor.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbMonitor.FlatStyle = FlatStyle.Flat;
-            cmbMonitor.BackColor = InputBack;
-            cmbMonitor.ForeColor = TextLight;
-            cmbMonitor.Left = InputLeft;
-            cmbMonitor.Top = ly;
-            cmbMonitor.Width = InputWidth;
-            BuildMonitorItems();
-            cmbMonitor.SelectedIndexChanged += Monitor_Changed;
+            lblMonitor.Width = layoutGroup.Width - Pad * 2;
             layoutGroup.Controls.Add(lblMonitor);
-            layoutGroup.Controls.Add(cmbMonitor);
-            ly += RowHeight;
+            ly += 20;
+
+            monitorPicker = new MonitorPicker();
+            monitorPicker.Left = Pad;
+            monitorPicker.Top = ly;
+            monitorPicker.Width = layoutGroup.Width - Pad * 2;
+            monitorPicker.Height = MonitorPickerHeight;
+            monitorPicker.SetSelectedNumber(cfg.monitor);
+            monitorPicker.SelectionChanged += Monitor_Changed;
+            layoutGroup.Controls.Add(monitorPicker);
+            ly += MonitorPickerHeight + 4;
 
             Label lblRefresh = MakeLabel(Strings.SettingsRefreshSec, ly);
             numRefreshSec = MakeNumeric(10, 3600, ClampInt(cfg.refreshSec, 10, 3600), ly);
@@ -496,6 +542,7 @@ namespace ClaudeTokenMeter
             }
             cfg.selectedModels = ComputeSelectedModels();
             owner.PreviewSettings();
+            InvalidatePreview();
         }
 
         // Builds the selectedModels array from the current checkbox state.
@@ -701,57 +748,84 @@ namespace ClaudeTokenMeter
 
         // --- Monitor selector ---
 
-        // Populates cmbMonitor with one entry per Screen (AllScreens order) and
-        // fills the parallel monitorNumbers array. The primary screen's entry
-        // maps to 0 so selecting it writes cfg.monitor = 0. Selects the entry
-        // that matches cfg.monitor (primary when cfg.monitor <= 0).
-        private void BuildMonitorItems()
-        {
-            Screen[] screens = Screen.AllScreens;
-            monitorNumbers = new int[screens.Length];
-
-            int selectedIndex = 0;
-            for (int i = 0; i < screens.Length; i++)
-            {
-                Screen s = screens[i];
-                int displayNo = WidgetForm.GetDisplayNumber(s);
-                bool primary = s.Primary;
-
-                string label = string.Format(
-                    primary ? Strings.SettingsMonitorPrimaryFmt : Strings.SettingsMonitorFmt,
-                    displayNo);
-                cmbMonitor.Items.Add(label);
-
-                // Primary entry writes 0; secondary entries write their number.
-                monitorNumbers[i] = primary ? 0 : displayNo;
-
-                if (primary && cfg.monitor <= 0)
-                {
-                    selectedIndex = i;
-                }
-                else if (!primary && displayNo == cfg.monitor)
-                {
-                    selectedIndex = i;
-                }
-            }
-
-            if (cmbMonitor.Items.Count > 0)
-            {
-                cmbMonitor.SelectedIndex = selectedIndex;
-            }
-        }
-
+        // The visual picker raised SelectionChanged: write the selected display
+        // number into cfg, push the live preview, and refresh the preview panel.
         private void Monitor_Changed(object sender, EventArgs e)
         {
             if (initializing)
             {
                 return;
             }
-            int idx = cmbMonitor.SelectedIndex;
-            if (idx >= 0 && idx < monitorNumbers.Length)
+            if (monitorPicker != null)
             {
-                cfg.monitor = monitorNumbers[idx];
+                cfg.monitor = monitorPicker.GetSelectedNumber();
                 owner.PreviewSettings();
+                InvalidatePreview();
+            }
+        }
+
+        // --- Live widget preview ---
+
+        // Repaints the preview backdrop and draws the widget card centered via
+        // the shared CardRenderer, so the panel always mirrors the real widget.
+        private void PreviewPanel_Paint(object sender, PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            int panelW = previewPanel.Width;
+            int panelH = previewPanel.Height;
+
+            // Subtle backdrop.
+            using (SolidBrush back = new SolidBrush(Color.FromArgb(24, 24, 24)))
+            {
+                g.FillRectangle(back, 0, 0, panelW, panelH);
+            }
+
+            // Card sized to the configured widget width (clamped to the panel),
+            // fixed 40px tall, drawn at scale 1 and centered.
+            int cardW = cfg.widgetWidth;
+            int maxW = panelW - 8;
+            if (cardW > maxW)
+            {
+                cardW = maxW;
+            }
+            if (cardW < 1)
+            {
+                cardW = 1;
+            }
+            int cardH = 40;
+
+            int cardX = (panelW - cardW) / 2;
+            int cardY = (panelH - cardH) / 2;
+
+            UsageResult u = owner.LastUsage != null ? owner.LastUsage : new UsageResult();
+
+            GraphicsState state = g.Save();
+            try
+            {
+                g.TranslateTransform(cardX, cardY);
+                CardRenderer.Draw(g, cfg, u, 1f, cardW, cardH, false);
+            }
+            finally
+            {
+                g.Restore(state);
+            }
+
+            // Thin border around the panel.
+            using (Pen borderPen = new Pen(Color.FromArgb(60, 60, 60), 1f))
+            {
+                g.DrawRectangle(borderPen, 0, 0, panelW - 1, panelH - 1);
+            }
+        }
+
+        // Forces the preview panel to repaint (mirrors any cfg / usage change).
+        private void InvalidatePreview()
+        {
+            if (previewPanel != null)
+            {
+                previewPanel.Invalidate();
             }
         }
 
@@ -767,6 +841,7 @@ namespace ClaudeTokenMeter
             cfg.showValueText = chkShowValueText.Checked;
             cfg.showResetTime = chkShowResetTime.Checked;
             owner.PreviewSettings();
+            InvalidatePreview();
         }
 
         private void Bars_Changed(object sender, EventArgs e)
@@ -779,6 +854,7 @@ namespace ClaudeTokenMeter
             cfg.showWeeklyBar = chkBarWeekly.Checked;
             cfg.showModelBars = chkBarModels.Checked;
             owner.PreviewSettings();
+            InvalidatePreview();
         }
 
         private void Layout_Changed(object sender, EventArgs e)
@@ -791,6 +867,7 @@ namespace ClaudeTokenMeter
             cfg.offsetX = (int)numOffsetX.Value;
             cfg.position = cmbPosition.SelectedIndex == 1 ? "left" : "right";
             owner.PreviewSettings();
+            InvalidatePreview();
         }
 
         private void Startup_Changed(object sender, EventArgs e)
@@ -807,6 +884,9 @@ namespace ClaudeTokenMeter
         private void StatusTimer_Tick(object sender, EventArgs e)
         {
             UpdateStatus();
+            // Mirror any usage-data change (source dot, bars, percentages) into
+            // the live preview panel on every refresh tick.
+            InvalidatePreview();
         }
 
         private void UpdateStatus()
@@ -915,10 +995,9 @@ namespace ClaudeTokenMeter
             cfg.widgetWidth = (int)numWidth.Value;
             cfg.offsetX = (int)numOffsetX.Value;
             cfg.position = cmbPosition.SelectedIndex == 1 ? "left" : "right";
-            if (cmbMonitor != null && cmbMonitor.SelectedIndex >= 0 &&
-                cmbMonitor.SelectedIndex < monitorNumbers.Length)
+            if (monitorPicker != null)
             {
-                cfg.monitor = monitorNumbers[cmbMonitor.SelectedIndex];
+                cfg.monitor = monitorPicker.GetSelectedNumber();
             }
             cfg.refreshSec = (int)numRefreshSec.Value;
 

@@ -34,6 +34,10 @@ namespace ClaudeTokenMeter
         // Per-model bar selection: empty = show all models.
         public string[] selectedModels = new string[0];
 
+        // First-run wizard: true once the quick-setup dialog has been shown /
+        // dismissed. Existing installs are marked done silently (see AppContext).
+        public bool setupDone = false;
+
         public string ResolveClaudeDir()
         {
             if (!string.IsNullOrEmpty(claudeDir))
@@ -126,6 +130,7 @@ namespace ClaudeTokenMeter
             selectedModels = (other.selectedModels != null)
                 ? (string[])other.selectedModels.Clone()
                 : new string[0];
+            setupDone = other.setupDone;
         }
     }
 }

@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $csc)) { throw ".NET Framework compiler not found: $csc" }
 
-$src = @("Program.cs", "Config.cs", "Strings.cs", "UsageReader.cs", "ApiUsageReader.cs", "UsageCache.cs", "AppContext.cs", "WidgetForm.cs", "SettingsForm.cs", "AssemblyInfo.cs")
+$src = @("Program.cs", "Config.cs", "Strings.cs", "UsageReader.cs", "ApiUsageReader.cs", "UsageCache.cs", "AppContext.cs", "WidgetForm.cs", "SettingsForm.cs", "SetupForm.cs", "MonitorPicker.cs", "CardRenderer.cs", "AssemblyInfo.cs")
 $refs = @(
     "/r:System.dll",
     "/r:System.Core.dll",

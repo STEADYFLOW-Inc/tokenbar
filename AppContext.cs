@@ -17,6 +17,7 @@ namespace ClaudeTokenMeter
         private TaskScheduler uiScheduler;
         private WidgetForm widget;
         private SettingsForm settingsForm;
+        private SetupForm setupForm;
         private UsageResult lastUsage;
         private volatile bool refreshing;
         private UsageResult lastApiUsage;
@@ -24,7 +25,17 @@ namespace ClaudeTokenMeter
 
         public MeterAppContext()
         {
+            // Detect a genuine first run (no config.json yet) BEFORE Config.Load,
+            // which creates a default config.json on the first call. Existing
+            // installs (config.json present but without setupDone) are marked done
+            // silently so they never see the first-run wizard.
+            bool isFirstRun = !System.IO.File.Exists(Config.ConfigPath);
             cfg = Config.Load();
+            if (!isFirstRun && !cfg.setupDone)
+            {
+                cfg.setupDone = true;
+                cfg.Save();
+            }
 
             EnsureWidget();
 
@@ -43,6 +54,22 @@ namespace ClaudeTokenMeter
             dataTimer.Start();
 
             RefreshData();
+
+            // First launch: show the quick-setup wizard non-modally. Existing
+            // installs already had setupDone forced true above, so this only
+            // fires for a genuine first run.
+            if (!cfg.setupDone)
+            {
+                try
+                {
+                    setupForm = new SetupForm(cfg, this);
+                    setupForm.Show();
+                    setupForm.Activate();
+                }
+                catch
+                {
+                }
+            }
         }
 
         private void PlaceTimer_Tick(object sender, EventArgs e)
@@ -308,6 +335,10 @@ namespace ClaudeTokenMeter
                 {
                     settingsForm.Close();
                 }
+                if (setupForm != null && !setupForm.IsDisposed)
+                {
+                    setupForm.Close();
+                }
                 if (WidgetAlive())
                 {
                     widget.Close();
@@ -334,6 +365,10 @@ namespace ClaudeTokenMeter
                 if (settingsForm != null && !settingsForm.IsDisposed)
                 {
                     settingsForm.Dispose();
+                }
+                if (setupForm != null && !setupForm.IsDisposed)
+                {
+                    setupForm.Dispose();
                 }
                 if (widget != null && !widget.IsDisposed)
                 {

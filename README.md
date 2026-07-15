@@ -18,7 +18,8 @@ Multi-bar mode (5-hour session / weekly / per-model) and the settings window:
 
 - **Main display** — 5-hour session remaining % + progress bar + reset time, always visible on the taskbar.
 - **Hover tooltip** — weekly usage (all models combined / per-model breakdown) with reset times.
-- **Settings window** (left-click) — toggle title, value text, and reset time visibility; choose which bars to show: 5-hour session, weekly (all models), or weekly per-model bars.
+- **First-run quick setup** — a wizard on first launch: pick the Claude directory (with live credential validation), monitor, position, and startup registration.
+- **Settings window** (left-click) — live widget preview, a visual monitor picker (click a screen like in Windows display settings), toggles for title / value text / reset time, and bar selection: 5-hour session, weekly (all models), or weekly per-model bars.
 - **Accurate data** — primary source is the same OAuth endpoint that Claude Code's `/usage` command uses (`GET https://api.anthropic.com/api/oauth/usage`), authenticated with the token already stored in `~/.claude/.credentials.json`.
 - **Automatic fallback** — the meter always shows API data. On a temporary API failure the last good API value stays on screen with an "as of HH:mm" label (persisted across restarts). The `~/.claude/projects/**/*.jsonl` local estimate (ccusage-style) is now diagnostics-only, surfaced in the tooltip and `--dump`.
 - **Auto-hides** during fullscreen apps so it never blocks a game or presentation.
