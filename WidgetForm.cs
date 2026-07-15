@@ -3,6 +3,8 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Globalization;
+using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
@@ -296,30 +298,67 @@ namespace ClaudeTokenMeter
                 }
             }
 
-            DrawStarburst(g, s, h);
+            DrawLogoIcon(g, s, h);
             DrawTitle(g, s);
             DrawContent(g, s, h);
         }
 
-        private void DrawStarburst(Graphics g, float s, int h)
+        // Official Claude logo, embedded as a manifest resource ("claude_logo.png"
+        // via csc /res). Loaded once lazily; the stream is copied into a fresh
+        // bitmap so the source stream can be disposed safely (GDI+ otherwise
+        // requires the stream to stay open for the Bitmap's lifetime).
+        private static Bitmap logoBitmap;
+        private static bool logoLoadAttempted;
+
+        private static Bitmap GetLogoBitmap()
         {
-            float cx = 17f * s;
-            float cy = h / 2f;
-            float r = 8f * s;
-            using (Pen ray = new Pen(Color.FromArgb(217, 119, 87), 2.2f * s))
+            if (!logoLoadAttempted)
             {
-                ray.StartCap = LineCap.Round;
-                ray.EndCap = LineCap.Round;
-                for (int i = 0; i < 8; i++)
+                logoLoadAttempted = true;
+                try
                 {
-                    double angle = (Math.PI * 2.0 * i / 8.0) + 0.35;
-                    float x1 = cx + (float)(Math.Cos(angle) * (0.28 * r));
-                    float y1 = cy + (float)(Math.Sin(angle) * (0.28 * r));
-                    float x2 = cx + (float)(Math.Cos(angle) * r);
-                    float y2 = cy + (float)(Math.Sin(angle) * r);
-                    g.DrawLine(ray, x1, y1, x2, y2);
+                    Stream resource = Assembly.GetExecutingAssembly()
+                        .GetManifestResourceStream("claude_logo.png");
+                    if (resource != null)
+                    {
+                        using (resource)
+                        using (Bitmap streamBound = new Bitmap(resource))
+                        {
+                            logoBitmap = new Bitmap(streamBound);
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    logoBitmap = null;
                 }
             }
+            return logoBitmap;
+        }
+
+        // Draws the logo in the icon slot as a rounded-corner square chip.
+        private void DrawLogoIcon(Graphics g, float s, int h)
+        {
+            Bitmap logo = GetLogoBitmap();
+            if (logo == null)
+            {
+                return;
+            }
+
+            float size = 18f * s;
+            float cx = 17f * s;
+            float cy = h / 2f;
+            RectangleF rect = new RectangleF(cx - size / 2f, cy - size / 2f, size, size);
+
+            InterpolationMode oldMode = g.InterpolationMode;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            using (GraphicsPath chip = RoundedRect(rect, 4f * s))
+            {
+                g.SetClip(chip);
+                g.DrawImage(logo, rect);
+                g.ResetClip();
+            }
+            g.InterpolationMode = oldMode;
         }
 
         private void DrawTitle(Graphics g, float s)
@@ -366,7 +405,6 @@ namespace ClaudeTokenMeter
                     CultureInfo.InvariantCulture,
                     Strings.LocalValueFmt,
                     remaining.ToString("N0", CultureInfo.InvariantCulture),
-                    limit.ToString("N0", CultureInfo.InvariantCulture),
                     percent);
                 g.DrawString(text, valueFont, valueBrush, 120f * s, 18.5f * s);
             }

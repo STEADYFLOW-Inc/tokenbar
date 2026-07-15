@@ -20,9 +20,13 @@ namespace ClaudeTokenMeter
         public static readonly string ResetFmt =
             ja ? "リセット {0}" : "resets {0}";
 
-        // Local-estimate value text: remaining / limit (percent).
+        // Local-estimate value text: remaining tokens (percent).
         public static readonly string LocalValueFmt =
-            ja ? "{0} / {1} ({2}%)" : "{0} / {1} ({2}%)";
+            ja ? "残り {0} ({1}%)" : "{0} left ({1}%)";
+
+        // Fallback label when the scoped-limit model name is missing.
+        public static readonly string ScopedModelFallback =
+            ja ? "モデル別" : "per-model";
 
         // Context menu captions.
         public static readonly string MenuRefresh =

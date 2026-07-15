@@ -163,7 +163,7 @@ namespace ClaudeTokenMeter
                             }
 
                             if (string.IsNullOrEmpty(result.WeeklyScopedModel))
-                                result.WeeklyScopedModel = "モデル別";
+                                result.WeeklyScopedModel = Strings.ScopedModelFallback;
 
                             break;
                         }

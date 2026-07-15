@@ -12,5 +12,5 @@ $refs = @(
     "/r:System.Web.Extensions.dll"
 )
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ /win32icon:app.ico /out:ClaudeTokenMeter.exe @refs @src
+& $csc /nologo /target:winexe /platform:x64 /optimize+ /win32icon:app.ico /res:assets\claude_logo.png,claude_logo.png /out:ClaudeTokenMeter.exe @refs @src
 if ($LASTEXITCODE -eq 0) { Write-Host "Build OK: ClaudeTokenMeter.exe" } else { throw "Build failed ($LASTEXITCODE)" }

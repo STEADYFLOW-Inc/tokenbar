@@ -17,3 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ja/en UI
 - Configurable position/offset/width/refresh interval
 - Rate-limit resilience: HTTP 429 backoff (honors Retry-After) and cached last-good API data during transient failures
+- Official Claude logo as the app and widget icon
