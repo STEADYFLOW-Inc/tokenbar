@@ -14,6 +14,11 @@ namespace ClaudeTokenMeter
         // Back-off: when set, TryRead returns false immediately until the time elapses.
         private static DateTime blockedUntilUtc = DateTime.MinValue;
 
+        // Set to true when the last failure was an auth error (401/403) or missing credentials.
+        // Cleared to false on any success or non-auth failure.
+        private static bool lastFailureWasAuth = false;
+        public static bool LastFailureWasAuth { get { return lastFailureWasAuth; } }
+
         /// <summary>
         /// Attempts to populate <paramref name="result"/> from the Claude OAuth usage API.
         /// Returns true and sets result.FromApi = true on success.
@@ -29,7 +34,10 @@ namespace ClaudeTokenMeter
                 // --- 1. Load credentials ---
                 string credPath = Path.Combine(cfg.ResolveClaudeDir(), ".credentials.json");
                 if (!File.Exists(credPath))
+                {
+                    lastFailureWasAuth = true;
                     return false;
+                }
 
                 string credJson = File.ReadAllText(credPath);
                 JavaScriptSerializer ser = new JavaScriptSerializer();
@@ -37,11 +45,17 @@ namespace ClaudeTokenMeter
 
                 Dictionary<string, object> credRoot = ser.DeserializeObject(credJson) as Dictionary<string, object>;
                 if (credRoot == null)
+                {
+                    lastFailureWasAuth = true;
                     return false;
+                }
 
                 string token = ExtractAccessToken(credRoot);
                 if (string.IsNullOrEmpty(token))
+                {
+                    lastFailureWasAuth = true;
                     return false;
+                }
 
                 // --- 2. HTTPS request ---
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(UsageUrl);
@@ -80,15 +94,18 @@ namespace ClaudeTokenMeter
                                 backoffSec = Math.Min(Math.Max(parsed, 60), 1800);
                             else
                                 backoffSec = 120;
+                            lastFailureWasAuth = false;
                         }
                         else if (statusCode == 401 || statusCode == 403)
                         {
                             // Token may be mid-refresh; short backoff.
                             backoffSec = 120;
+                            lastFailureWasAuth = true;
                         }
                         else
                         {
                             backoffSec = 60;
+                            lastFailureWasAuth = false;
                         }
                         blockedUntilUtc = DateTime.UtcNow.AddSeconds(backoffSec);
                         httpResp.Close();
@@ -97,6 +114,11 @@ namespace ClaudeTokenMeter
                     {
                         blockedUntilUtc = DateTime.UtcNow.AddSeconds(60);
                         wex.Response.Close();
+                        lastFailureWasAuth = false;
+                    }
+                    else
+                    {
+                        lastFailureWasAuth = false;
                     }
                     return false;
                 }
@@ -186,6 +208,7 @@ namespace ClaudeTokenMeter
                 }
 
                 result.FromApi = true;
+                lastFailureWasAuth = false;
                 // Persist this successful snapshot so it survives restarts and can be
                 // preferred over the local JSONL estimate during transient outages.
                 // result.FetchedAtUtc was set by UsageReader.Read at entry.
@@ -194,6 +217,7 @@ namespace ClaudeTokenMeter
             }
             catch (Exception)
             {
+                lastFailureWasAuth = false;
                 return false;
             }
         }

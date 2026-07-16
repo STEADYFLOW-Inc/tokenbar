@@ -38,6 +38,9 @@ namespace ClaudeTokenMeter
         public DateTime FetchedAtUtc;
         // True when this result is a cached API snapshot being shown during a transient outage.
         public bool Stale;
+        // True when the last API attempt failed with an auth error (401/403) or missing credentials.
+        // Actionable hint: the user should run Claude Code once on this PC to refresh the token.
+        public bool AuthExpired;
 
         // Effective local token limit used by the clean-mode / fallback meter.
         // Set by UsageReader.Read whenever the local JSONL estimation runs:
@@ -72,6 +75,7 @@ namespace ClaudeTokenMeter
                     //    the cached API fields + FromApi=true + Stale=true take precedence since
                     //    they occupy different fields than the local computation.
                     UsageCache.TryLoad(result);
+                    result.AuthExpired = ApiUsageReader.LastFailureWasAuth;
                 }
                 // Clean mode (useApi == false): never touch .credentials.json,
                 // never call the network, never read the API disk cache. Fall

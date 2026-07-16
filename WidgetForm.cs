@@ -254,6 +254,11 @@ namespace ClaudeTokenMeter
                         Strings.TipCachedAtFmt,
                         u.FetchedAtUtc.ToLocalTime().ToString("H:mm")));
                 }
+                if (u.AuthExpired)
+                {
+                    api.Append("\r\n");
+                    api.Append(Strings.TipAuthExpired);
+                }
                 api.Append(updatedLine);
                 return api.ToString();
             }
@@ -291,6 +296,11 @@ namespace ClaudeTokenMeter
 
             sb.Append("\r\n");
             sb.Append(Strings.TipSourceLocal);
+            if (u.AuthExpired)
+            {
+                sb.Append("\r\n");
+                sb.Append(Strings.TipAuthExpired);
+            }
             sb.Append(updatedLine);
 
             return sb.ToString();

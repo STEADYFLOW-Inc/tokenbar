@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-07-16
+
+### Added
+- Expired-auth guidance: when the stored Claude Code token has expired (HTTP 401/403) or credentials are missing, the tooltip and the settings status footer now say so and explain that running Claude Code once on this PC refreshes it
+
 ## [1.7.1] - 2026-07-16
 
 ### Security

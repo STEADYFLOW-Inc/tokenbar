@@ -198,6 +198,18 @@ namespace ClaudeTokenMeter
                 ? "⚠ API一時利用不可・前回取得値を表示中"
                 : "⚠ API temporarily unavailable — showing cached data";
 
+        // Auth-expired warning shown in tooltip when the OAuth token has expired.
+        public static readonly string TipAuthExpired =
+            ja
+                ? "⚠ 認証の有効期限切れ — このPCで Claude Code を一度起動すると自動復旧します"
+                : "⚠ Auth token expired — run Claude Code once on this PC to refresh it";
+
+        // Auth-expired status line shown in the settings window footer.
+        public static readonly string SettingsSourceAuthExpired =
+            ja
+                ? "データ源: 認証期限切れ（Claude Code を起動で復旧）"
+                : "Source: auth expired (run Claude Code to fix)";
+
         // Error messages.
         public static readonly string ErrNoCredentials =
             ja

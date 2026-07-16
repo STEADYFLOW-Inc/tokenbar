@@ -965,6 +965,11 @@ namespace ClaudeTokenMeter
                 dot = DotGreen;
                 text = Strings.SettingsSourceApi;
             }
+            else if (u != null && u.AuthExpired)
+            {
+                dot = DotAmber;
+                text = Strings.SettingsSourceAuthExpired;
+            }
             else if (u.FromApi && u.Stale)
             {
                 dot = DotAmber;
