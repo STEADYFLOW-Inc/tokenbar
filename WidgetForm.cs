@@ -259,10 +259,14 @@ namespace ClaudeTokenMeter
             }
 
             StringBuilder sb = new StringBuilder();
-            // No API data has ever been cached: lead with the not-connected notice,
-            // then keep the local-estimate diagnostic lines that follow.
-            sb.Append(Strings.TipNoApiData);
-            sb.Append("\r\n");
+            // Clean mode (useApi == false): the local estimate is the intended
+            // data source, not a fallback — lead with the estimate lines directly.
+            // API mode with nothing cached yet: lead with the not-connected notice.
+            if (cfg.useApi)
+            {
+                sb.Append(Strings.TipNoApiData);
+                sb.Append("\r\n");
+            }
             sb.Append(string.Format(
                 CultureInfo.InvariantCulture,
                 Strings.TipUsedFmt,

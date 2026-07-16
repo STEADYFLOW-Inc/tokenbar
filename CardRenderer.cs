@@ -160,8 +160,19 @@ namespace ClaudeTokenMeter
             {
                 return;
             }
-            if (usage == null || !usage.FromApi)
+            if (usage == null)
             {
+                return;
+            }
+
+            // Clean mode: no API data, annotate from the local block reset time.
+            if (!usage.FromApi)
+            {
+                if (cfg.useApi || !usage.Active || !usage.ResetAtUtc.HasValue)
+                {
+                    return;
+                }
+                DrawCleanTitleAnnotation(g, cfg, usage, s);
                 return;
             }
 
@@ -224,6 +235,43 @@ namespace ClaudeTokenMeter
                 if (compactX >= minStart)
                 {
                     g.DrawString(compactText, annFont, annBrush, compactX, y, tight);
+                }
+                // Otherwise: not enough room; skip (tooltip carries it).
+            }
+        }
+
+        // Title-row reset annotation for clean mode: the local block reset time
+        // (compact "↻ H:mm"), gray, right-aligned in the free space after the
+        // title. Callers ensure usage.Active && usage.ResetAtUtc.HasValue.
+        private static void DrawCleanTitleAnnotation(Graphics g, Config cfg, UsageResult usage, float s)
+        {
+            string text = string.Format(
+                CultureInfo.InvariantCulture,
+                Strings.ResetFmt,
+                usage.ResetAtUtc.Value.ToLocalTime().ToString("H:mm"));
+            Color color = ThemeManager.Current.DimText;
+
+            StringFormat tight = StringFormat.GenericTypographic;
+
+            float titleEnd;
+            using (Font titleFont = new Font("Segoe UI", 10.5f * s, GraphicsUnit.Pixel))
+            {
+                SizeF titleSize = g.MeasureString(Strings.Title, titleFont, int.MaxValue, tight);
+                titleEnd = ContentX * s + titleSize.Width;
+            }
+
+            float rightEdge = (cfg.widgetWidth - 20f) * s;
+            float minStart = titleEnd + 6f * s;
+            float y = 6f * s;
+
+            using (Font annFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
+            using (SolidBrush annBrush = new SolidBrush(color))
+            {
+                SizeF size = g.MeasureString(text, annFont, int.MaxValue, tight);
+                float x = rightEdge - size.Width;
+                if (x >= minStart)
+                {
+                    g.DrawString(text, annFont, annBrush, x, y, tight);
                 }
                 // Otherwise: not enough room; skip (tooltip carries it).
             }
@@ -335,16 +383,53 @@ namespace ClaudeTokenMeter
                         usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
                 }
             }
-            else
+            else if (cfg.useApi)
             {
-                // No API data has ever been cached: show a no-data placeholder.
+                // API mode with nothing fetched yet: show a no-data placeholder.
                 row.NoData = true;
                 row.Fraction = 0.0;
                 row.PctText = "—";
                 row.PctValue = 0;
             }
+            else
+            {
+                // Clean mode: drive the meter from the local JSONL estimate with
+                // the effective (possibly auto-calibrated) token limit.
+                long effLimit = EffectiveLocalLimit(cfg, usage);
+                long used = (usage != null && usage.Active) ? usage.UsedTokens : 0L;
+                long remaining = effLimit - used;
+                if (remaining < 0L)
+                    remaining = 0L;
+
+                double frac = effLimit > 0L ? (double)remaining / (double)effLimit : 0.0;
+                row.Fraction = Clamp01(frac);
+                int remainingInt = (int)Math.Round(frac * 100.0);
+                row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
+                row.PctValue = remainingInt;
+
+                // Reset annotation from the local block reset time when active.
+                if (cfg.showResetTime && usage != null && usage.Active && usage.ResetAtUtc.HasValue)
+                {
+                    row.ShowReset = true;
+                    row.ResetText = string.Format(
+                        CultureInfo.InvariantCulture,
+                        Strings.ResetFmt,
+                        usage.ResetAtUtc.Value.ToLocalTime().ToString("H:mm"));
+                }
+            }
 
             return row;
+        }
+
+        // Resolves the local meter's token limit: prefer the reader's effective
+        // (auto-calibrated) value, then cfg.tokenLimit, then a 200k fallback.
+        private static long EffectiveLocalLimit(Config cfg, UsageResult usage)
+        {
+            if (usage != null && usage.EffectiveTokenLimit > 0L)
+                return usage.EffectiveTokenLimit;
+            if (cfg.tokenLimit > 0L)
+                return cfg.tokenLimit;
+            return 200000L;
         }
 
         private static BarRow BuildWeeklyRow(UsageResult usage)

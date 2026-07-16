@@ -46,7 +46,7 @@ namespace ClaudeTokenMeter
         private const int BarsBaseHeight = 108;
         // Max overall form height; realistic model count is 1-4 so this is a guard.
         // Must leave room for preview (48) + monitor picker (92) + all groups.
-        private const int MaxFormHeight = 860;
+        private const int MaxFormHeight = 946;
 
         private readonly Config cfg;
         private readonly MeterAppContext owner;
@@ -60,9 +60,14 @@ namespace ClaudeTokenMeter
         private CheckBox chkShowValueText;
         private CheckBox chkShowResetTime;
 
+        private CheckBox chkUseApi;
+
         private CheckBox chkBarSession;
         private CheckBox chkBarWeekly;
         private CheckBox chkBarModels;
+
+        // Data source group (between bars and layout groups).
+        private GroupBox dataGroup;
 
         // Bars group + dynamic per-model selection.
         private GroupBox barsGroup;
@@ -227,6 +232,29 @@ namespace ClaudeTokenMeter
 
             y = barsGroup.Bottom + Pad;
 
+            // 2.5 Data source group: "use API" toggle + clean-mode hint.
+            // Height 86: group header (~20) + checkbox row (22+4) + hint label (30+4) + pad (6).
+            dataGroup = MakeGroup(Strings.SettingsDataGroup, y, 86);
+            this.Controls.Add(dataGroup);
+
+            chkUseApi = MakeCheck(Strings.SettingsUseApi, cfg.useApi, 18);
+            chkUseApi.CheckedChanged += UseApi_Changed;
+            dataGroup.Controls.Add(chkUseApi);
+
+            Label lblCleanHint = new Label();
+            lblCleanHint.Text = Strings.SettingsCleanModeHint;
+            lblCleanHint.Font = new Font("Segoe UI", 8.5f);
+            lblCleanHint.ForeColor = TextDim;
+            lblCleanHint.BackColor = BackDark;
+            lblCleanHint.AutoSize = false;
+            lblCleanHint.Left = Pad;
+            lblCleanHint.Top = chkUseApi.Bottom + 4;
+            lblCleanHint.Width = dataGroup.Width - Pad * 2;
+            lblCleanHint.Height = 30;
+            dataGroup.Controls.Add(lblCleanHint);
+
+            y = dataGroup.Bottom + Pad;
+
             // 3. Layout group (width, offset, position, monitor picker, refresh).
             // Base height covers the 4 combo/numeric rows + the monitor label +
             // the ~92px picker + bottom padding.
@@ -351,8 +379,18 @@ namespace ClaudeTokenMeter
                 return;
             }
 
-            int y = barsGroup.Bottom + Pad;
-            layoutGroup.Top = y;
+            // If the data-source group exists, it sits between bars and layout.
+            if (dataGroup != null)
+            {
+                dataGroup.Top = barsGroup.Bottom + Pad;
+                layoutGroup.Top = dataGroup.Bottom + Pad;
+            }
+            else
+            {
+                layoutGroup.Top = barsGroup.Bottom + Pad;
+            }
+
+            int y = layoutGroup.Top;
 
             y = layoutGroup.Bottom + Pad;
 
@@ -870,6 +908,18 @@ namespace ClaudeTokenMeter
             InvalidatePreview();
         }
 
+        private void UseApi_Changed(object sender, EventArgs e)
+        {
+            if (initializing)
+            {
+                return;
+            }
+            cfg.useApi = chkUseApi.Checked;
+            owner.PreviewSettings();
+            InvalidatePreview();
+            owner.RefreshData();
+        }
+
         private void Startup_Changed(object sender, EventArgs e)
         {
             if (initializing)
@@ -919,6 +969,11 @@ namespace ClaudeTokenMeter
             {
                 dot = DotAmber;
                 text = Strings.SettingsSourceApiStale;
+            }
+            else if (!cfg.useApi)
+            {
+                dot = DotGray;
+                text = Strings.SettingsSourceLocalClean;
             }
             else
             {
@@ -1000,6 +1055,11 @@ namespace ClaudeTokenMeter
                 cfg.monitor = monitorPicker.GetSelectedNumber();
             }
             cfg.refreshSec = (int)numRefreshSec.Value;
+
+            if (chkUseApi != null)
+            {
+                cfg.useApi = chkUseApi.Checked;
+            }
 
             cfg.Save();
             owner.ApplySettings();

@@ -6,8 +6,16 @@ namespace ClaudeTokenMeter
 {
     public class Config
     {
+        // Local-estimate token limit. 0 (or negative, coerced to 0 at Load)
+        // means AUTO: the meter self-calibrates from the last 7 days of local
+        // usage (max 5-hour-block total). A positive value pins the limit.
         public long tokenLimit = 200000;
         public bool includeCacheRead = false;
+
+        // When false ("clean mode"), the app never reads .credentials.json and
+        // never calls the network. The meter is driven purely by the local
+        // JSONL estimation with an auto-calibrated token limit.
+        public bool useApi = true;
         // 120s keeps the usage endpoint's shared rate limit comfortable
         // (frequent polling can 429 both this widget and /usage itself).
         public int refreshSec = 120;
@@ -65,8 +73,9 @@ namespace ClaudeTokenMeter
                     string text = File.ReadAllText(path);
                     JavaScriptSerializer ser = new JavaScriptSerializer();
                     Config cfg = ser.Deserialize<Config>(text);
-                    if (cfg.tokenLimit <= 0)
-                        cfg.tokenLimit = 200000;
+                    // 0 = auto-calibrate. Only clamp negatives up to 0.
+                    if (cfg.tokenLimit < 0)
+                        cfg.tokenLimit = 0;
                     if (cfg.refreshSec < 5)
                         cfg.refreshSec = 5;
                     if (cfg.widgetWidth < 160)
@@ -114,6 +123,7 @@ namespace ClaudeTokenMeter
                 return;
             tokenLimit = other.tokenLimit;
             includeCacheRead = other.includeCacheRead;
+            useApi = other.useApi;
             refreshSec = other.refreshSec;
             embed = other.embed;
             claudeDir = other.claudeDir;

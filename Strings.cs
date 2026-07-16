@@ -114,6 +114,16 @@ namespace ClaudeTokenMeter
             ja ? "データ源: ローカル推計（JSONL読み出し）" : "Source: local estimate (JSONL)";
         public static readonly string SettingsSourceNone =
             ja ? "データ源: 未取得" : "Source: no data yet";
+        public static readonly string SettingsDataGroup =
+            ja ? "データ取得" : "Data source";
+        public static readonly string SettingsUseApi =
+            ja ? "usage API を使用（正確・非公式エンドポイント）" : "Use the usage API (accurate, unofficial endpoint)";
+        public static readonly string SettingsCleanModeHint =
+            ja
+                ? "オフ = クリーンモード: 通信なし・認証情報に触れず、ローカルの会話記録から推計"
+                : "Off = clean mode: no network, no credential access; estimates from local transcripts";
+        public static readonly string SettingsSourceLocalClean =
+            ja ? "データ源: ローカル推計（クリーンモード）" : "Source: local estimate (clean mode)";
 
         // Quick-setup wizard (first run).
         public static readonly string SetupTitle =

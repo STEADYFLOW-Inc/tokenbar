@@ -22,6 +22,7 @@ Multi-bar mode (5-hour session / weekly / per-model) and the settings window:
 - **Settings window** (left-click) — live widget preview, a visual monitor picker (click a screen like in Windows display settings), toggles for title / value text / reset time, and bar selection: 5-hour session, weekly (all models), or weekly per-model bars.
 - **Accurate data** — primary source is the same OAuth endpoint that Claude Code's `/usage` command uses (`GET https://api.anthropic.com/api/oauth/usage`), authenticated with the token already stored in `~/.claude/.credentials.json`.
 - **Automatic fallback** — the meter always shows API data. On a temporary API failure the last good API value stays on screen with an "as of HH:mm" label (persisted across restarts). The `~/.claude/projects/**/*.jsonl` local estimate (ccusage-style) is now diagnostics-only, surfaced in the tooltip and `--dump`.
+- **Clean mode** — opt out of the unofficial API entirely (no network access, no credential reads). The meter then uses the local transcript estimate with an auto-calibrated limit (largest 5-hour block of the last 7 days). Toggle via the settings window or set `useApi: false` in `config.json`.
 - **Auto-hides** during fullscreen apps so it never blocks a game or presentation.
 - **Survives Explorer restarts** — the widget reattaches automatically.
 - **Single instance** — a second copy exits immediately if one is already running.
@@ -87,7 +88,8 @@ Refresh is also available in the right-click context menu.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `tokenLimit` | `200000` | Used only by `--dump` / the tooltip local estimate; the meter always shows API data |
+| `useApi` | `true` | `true` = use the OAuth usage API (accurate); `false` = clean mode: no network access, no credential reads, meter uses local transcript estimate |
+| `tokenLimit` | `200000` | Token limit used for the local estimate; `0` = auto-calibrate from the last 7 days (used in clean mode / fallback estimates) |
 | `includeCacheRead` | `false` | Used only by `--dump` / the tooltip local estimate; the meter always shows API data |
 | `refreshSec` | `120` | Data refresh interval in seconds (lower values risk transient HTTP 429 on the shared usage endpoint) |
 | `position` | `"right"` | Taskbar side — `"right"` places the widget near the clock; `"left"` near the Start button |
@@ -123,6 +125,10 @@ This is the exact same endpoint Claude Code's `/usage` command queries. The resp
 
 If the API call fails (offline, token expired, etc.), the widget scans `~/.claude/projects/**/*.jsonl`, identifies the current 5-hour block, and sums token usage from JSONL entries — the same approach used by tools like `ccusage`. Accuracy depends on `tokenLimit` matching your account's actual limit.
 
+**Clean mode**
+
+When `useApi` is set to `false` (or toggled off in the settings window), TokenBar skips the API entirely — no network requests and no reads from `~/.claude/.credentials.json`. The meter runs purely on the local JSONL estimate. The token limit is auto-calibrated from the last 7 days of transcript data (largest 5-hour block), so `tokenLimit: 0` works without manual configuration.
+
 **Rendering**
 
 Windows 11's XAML taskbar composites over classic `SetParent` child windows, making traditional taskbar embedding unreliable. TokenBar instead uses a **TOPMOST overlay** positioned precisely over the taskbar (the same technique used by ElevenClock). It monitors fullscreen state and hides automatically to avoid covering fullscreen applications.
@@ -146,6 +152,7 @@ Windows 11's XAML taskbar composites over classic `SetParent` child windows, mak
 - Everything runs **locally on your machine**.
 - The OAuth token is read from Claude Code's own credentials file (`~/.claude/.credentials.json`). It is used solely for the single HTTPS request to `api.anthropic.com` and is never logged, cached elsewhere, or transmitted to any other server.
 - No telemetry. No third-party servers. No network traffic beyond the one API call per refresh cycle.
+- **Clean mode** (`useApi: false`) disables all network access and credential reads entirely — the meter runs purely on the local JSONL estimate.
 
 ---
 
