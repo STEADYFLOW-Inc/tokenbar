@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2026-07-16
+
+### Fixed
+- The reset time now actually shows when "show reset time" is on: the on-card annotation no longer gets replaced by the fetched-at time while the API data is cached — staleness is conveyed by the amber color instead, and the fetch time lives in the tooltip only
+- A reset time already in the past (rolled-over cached window) is hidden rather than shown as a wrong time
+
 ## [1.7.2] - 2026-07-16
 
 ### Added

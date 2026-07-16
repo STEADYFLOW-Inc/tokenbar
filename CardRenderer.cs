@@ -150,10 +150,10 @@ namespace ClaudeTokenMeter
             }
         }
 
-        // Draws the reset-time (or cached-at) annotation on the title row,
-        // right-aligned in the free space to the right of the title text.
-        // Used by ALL layouts (single bar, multi, two-column) whenever the
-        // title is visible, so the reset time is shown consistently.
+        // Draws the reset-time annotation on the title row, right-aligned in
+        // the free space to the right of the title text. Used by ALL layouts
+        // (single bar, multi, two-column) whenever the title is visible, so
+        // the reset time is shown consistently.
         private static void DrawTitleAnnotation(Graphics g, Config cfg, UsageResult usage, float s)
         {
             if (!cfg.showResetTime)
@@ -176,33 +176,20 @@ namespace ClaudeTokenMeter
                 return;
             }
 
-            // Choose the annotation text and color. Stale cache wins: show the
-            // cached-at time (compact already) in amber-gray. Otherwise show the
-            // long-form reset time in gray, with a compact fallback if it won't fit.
-            string longText;
-            string compactText;
-            Color color;
-            if (usage.Stale)
-            {
-                string cachedAt = string.Format(
-                    CultureInfo.InvariantCulture,
-                    Strings.CachedAtFmt,
-                    usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
-                longText = cachedAt;
-                compactText = cachedAt; // already compact
-                color = ThemeManager.Current.StaleText;
-            }
-            else if (usage.SessionResetUtc.HasValue)
-            {
-                string local = usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm");
-                longText = string.Format(CultureInfo.InvariantCulture, Strings.TitleResetFmt, local);
-                compactText = string.Format(CultureInfo.InvariantCulture, Strings.ResetFmt, local);
-                color = ThemeManager.Current.DimText;
-            }
-            else
+            // The annotation slot carries the RESET TIME only. A stale cache
+            // keeps showing the reset time (amber-tinted to convey staleness)
+            // as long as it is still in the future; a past reset means the
+            // cached window already rolled over, so show nothing rather than
+            // a wrong time. The tooltip carries the cached-at details.
+            if (!usage.SessionResetUtc.HasValue || usage.SessionResetUtc.Value <= DateTime.UtcNow)
             {
                 return;
             }
+
+            string local = usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm");
+            string longText = string.Format(CultureInfo.InvariantCulture, Strings.TitleResetFmt, local);
+            string compactText = string.Format(CultureInfo.InvariantCulture, Strings.ResetFmt, local);
+            Color color = usage.Stale ? ThemeManager.Current.StaleText : ThemeManager.Current.DimText;
 
             StringFormat tight = StringFormat.GenericTypographic;
 
@@ -365,16 +352,11 @@ namespace ClaudeTokenMeter
                 int remainingInt = (int)Math.Round(remainingPct);
                 row.PctText = remainingInt.ToString(CultureInfo.InvariantCulture) + "%";
                 row.PctValue = remainingInt;
-                if (usage.Stale)
-                {
-                    // Stale cache: replace the reset time with the cached-at time.
-                    row.ShowReset = true;
-                    row.ResetText = string.Format(
-                        CultureInfo.InvariantCulture,
-                        Strings.CachedAtFmt,
-                        usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
-                }
-                else if (usage.SessionResetUtc.HasValue)
+                // Reset time only; staleness is conveyed by color (see
+                // ResetTextColor), never by swapping in the cached-at time.
+                // A past reset time (stale cache whose window already rolled
+                // over) shows nothing rather than a wrong time.
+                if (usage.SessionResetUtc.HasValue && usage.SessionResetUtc.Value > DateTime.UtcNow)
                 {
                     row.ShowReset = true;
                     row.ResetText = string.Format(
@@ -613,7 +595,8 @@ namespace ClaudeTokenMeter
             }
         }
 
-        // Amber-ish gray for a stale "as of HH:mm" label; plain gray otherwise.
+        // Reset-time annotation color: amber-ish when the API cache is stale
+        // (color conveys staleness; the text stays the reset time), dim otherwise.
         private static Color ResetTextColor(UsageResult usage, BarRow row)
         {
             bool stale = usage != null && usage.FromApi && usage.Stale;
@@ -650,30 +633,20 @@ namespace ClaudeTokenMeter
                 return 0f;
             }
 
-            // Compact forms only (mirrors DrawTitleAnnotation's fallback):
-            // stale → cached-at "(H:mm)" in amber-gray; else reset "↻ H:mm" in gray.
-            string text;
-            Color color;
-            if (usage.Stale)
-            {
-                text = string.Format(
-                    CultureInfo.InvariantCulture,
-                    Strings.CachedAtFmt,
-                    usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
-                color = ThemeManager.Current.StaleText;
-            }
-            else if (usage.SessionResetUtc.HasValue)
-            {
-                text = string.Format(
-                    CultureInfo.InvariantCulture,
-                    Strings.ResetFmt,
-                    usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
-                color = ThemeManager.Current.DimText;
-            }
-            else
+            // Compact reset time only ("↻ H:mm"); staleness is conveyed by
+            // color (amber when stale), never by swapping in the cached-at
+            // time. A past reset time (stale cache whose window already
+            // rolled over) shows nothing rather than a wrong time.
+            if (!usage.SessionResetUtc.HasValue || usage.SessionResetUtc.Value <= DateTime.UtcNow)
             {
                 return 0f;
             }
+
+            string text = string.Format(
+                CultureInfo.InvariantCulture,
+                Strings.ResetFmt,
+                usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
+            Color color = usage.Stale ? ThemeManager.Current.StaleText : ThemeManager.Current.DimText;
 
             StringFormat tight = StringFormat.GenericTypographic;
             using (Font annFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
