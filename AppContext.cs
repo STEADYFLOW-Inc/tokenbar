@@ -231,7 +231,13 @@ namespace ClaudeTokenMeter
         {
             try
             {
-                Process.Start("notepad.exe", "\"" + Config.ConfigPath + "\"");
+                // Absolute notepad path (never PATH-resolved) and a quote-free
+                // argument so the path can't break out of its quoting.
+                string notepad = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.System),
+                    "notepad.exe");
+                string arg = Config.ConfigPath.Replace("\"", "");
+                Process.Start(notepad, "\"" + arg + "\"");
             }
             catch
             {

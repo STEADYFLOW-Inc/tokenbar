@@ -152,6 +152,7 @@ Windows 11's XAML taskbar composites over classic `SetParent` child windows, mak
 - Everything runs **locally on your machine**.
 - The OAuth token is read from Claude Code's own credentials file (`~/.claude/.credentials.json`). It is used solely for the single HTTPS request to `api.anthropic.com` and is never logged, cached elsewhere, or transmitted to any other server.
 - No telemetry. No third-party servers. No network traffic beyond the one API call per refresh cycle.
+- **Install location**: place `TokenBar.exe` in a folder writable only by your own user account (e.g. `%LOCALAPPDATA%\TokenBar\`). Like any Windows executable, running it from a world-writable folder exposes it to DLL search-order hijacking.
 - **Clean mode** (`useApi: false`) disables all network access and credential reads entirely — the meter runs purely on the local JSONL estimate.
 
 ---

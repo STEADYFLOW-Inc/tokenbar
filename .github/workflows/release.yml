@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+# The release job needs contents: write to create the GitHub release.
+# Actions are pinned to commit SHAs to prevent tag-moving supply-chain
+# attacks from reaching the released binary.
 permissions:
   contents: write
 
@@ -14,12 +17,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Build
         run: powershell -File build.ps1
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           files: TokenBar.exe

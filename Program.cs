@@ -46,12 +46,23 @@ namespace ClaudeTokenMeter
                 {
                     return;
                 }
+                // Strict TLS floor: 1.2/1.3 only. If the OS rejects the TLS 1.3
+                // flag (older Windows 10), fall back to adding 1.2 to the set.
                 try
                 {
-                    System.Net.ServicePointManager.SecurityProtocol = System.Net.ServicePointManager.SecurityProtocol | System.Net.SecurityProtocolType.Tls12;
+                    System.Net.ServicePointManager.SecurityProtocol =
+                        System.Net.SecurityProtocolType.Tls12 | (System.Net.SecurityProtocolType)12288;
                 }
                 catch
                 {
+                    try
+                    {
+                        System.Net.ServicePointManager.SecurityProtocol =
+                            System.Net.ServicePointManager.SecurityProtocol | System.Net.SecurityProtocolType.Tls12;
+                    }
+                    catch
+                    {
+                    }
                 }
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
