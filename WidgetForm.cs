@@ -28,9 +28,24 @@ namespace ClaudeTokenMeter
         private const uint SWP_HIDEWINDOW = 0x0080;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
+        // WinEvent hook constants for instant foreground-change reaction.
+        private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+        private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+        private const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
+
+        // Our own process id, cached once. Used to skip hiding for fullscreen
+        // when our own settings/setup windows are the foreground window.
+        private static readonly int CurrentProcessId =
+            System.Diagnostics.Process.GetCurrentProcess().Id;
+
         private readonly Config cfg;
         private readonly MeterAppContext owner;
         private readonly ToolTip tip;
+
+        // Foreground WinEvent hook. The delegate MUST be held in an instance
+        // field so the GC cannot collect it while the hook is alive.
+        private IntPtr winEventHook = IntPtr.Zero;
+        private WinEventDelegate winEventProc;
 
         private UsageResult usage;
         private float scale = 1f;
@@ -66,8 +81,54 @@ namespace ClaudeTokenMeter
             Click += WidgetForm_Click;
         }
 
+        // Installs the foreground WinEvent hook once the window handle exists.
+        // The callback fires on this thread via the message loop (out-of-context),
+        // so it is safe to touch UI state directly from it.
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+
+            if (winEventHook == IntPtr.Zero)
+            {
+                // Keep the delegate alive for the lifetime of the hook.
+                winEventProc = new WinEventDelegate(OnForegroundChanged);
+                winEventHook = SetWinEventHook(
+                    EVENT_SYSTEM_FOREGROUND,
+                    EVENT_SYSTEM_FOREGROUND,
+                    IntPtr.Zero,
+                    winEventProc,
+                    0,
+                    0,
+                    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+            }
+        }
+
+        // Fires whenever the foreground window changes. React instantly so we
+        // do not linger on top of a newly-fullscreen app until the next timer
+        // tick. UpdatePlacement already handles the hide/show decision.
+        private void OnForegroundChanged(IntPtr hWinEventHook, uint eventType,
+            IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        {
+            try
+            {
+                if (IsDisposed || !IsHandleCreated)
+                {
+                    return;
+                }
+                UpdatePlacement();
+            }
+            catch
+            {
+            }
+        }
+
         protected override void Dispose(bool disposing)
         {
+            if (winEventHook != IntPtr.Zero)
+            {
+                UnhookWinEvent(winEventHook);
+                winEventHook = IntPtr.Zero;
+            }
             if (disposing && tip != null)
             {
                 tip.Dispose();
@@ -410,6 +471,15 @@ namespace ClaudeTokenMeter
                 return false;
             }
 
+            // Never hide for our own windows (settings/setup dialogs). If the
+            // foreground window belongs to this process, treat it as non-covering.
+            uint fgPid = 0;
+            GetWindowThreadProcessId(fg, out fgPid);
+            if ((int)fgPid == CurrentProcessId)
+            {
+                return false;
+            }
+
             StringBuilder cls = new StringBuilder(256);
             int len = GetClassName(fg, cls, cls.Capacity);
             if (len <= 0)
@@ -433,9 +503,11 @@ namespace ClaudeTokenMeter
 
             // Compare against the absolute bounds of the target screen. Secondary
             // screens have non-zero origins, so we cannot assume a (0,0) origin.
+            // Allow a 3-pixel tolerance (physical px) so fullscreen apps whose
+            // rect is off by a pixel or two from the screen bounds still count.
             Rectangle bounds = target.Bounds;
-            return fr.left <= bounds.Left && fr.top <= bounds.Top &&
-                fr.right >= bounds.Right && fr.bottom >= bounds.Bottom;
+            return fr.left <= bounds.Left + 3 && fr.top <= bounds.Top + 3 &&
+                fr.right >= bounds.Right - 3 && fr.bottom >= bounds.Bottom - 3;
         }
 
         private float ResolveScale(IntPtr hwnd)
@@ -669,5 +741,20 @@ namespace ClaudeTokenMeter
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        private delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType,
+            IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax,
+            IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc,
+            uint idProcess, uint idThread, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
     }
 }

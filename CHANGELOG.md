@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-07-16
+
+### Fixed
+- Fullscreen auto-hide now reacts instantly (~20ms, measured) instead of up to 5 seconds: a WinEvent hook on foreground changes re-evaluates placement the moment focus moves, with the 5s timer as fallback
+- Fullscreen detection tolerates windows whose rect is off by up to 3px from the screen bounds
+- The widget no longer hides when one of TokenBar's own windows (settings/setup) is in the foreground
+
 ## [1.7.3] - 2026-07-16
 
 ### Fixed
