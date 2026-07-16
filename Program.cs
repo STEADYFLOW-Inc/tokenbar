@@ -1,4 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -25,6 +30,12 @@ namespace ClaudeTokenMeter
             if (args != null && args.Length > 0 && args[0] == "--dump")
             {
                 DumpUsage();
+                return;
+            }
+
+            if (args != null && args.Length > 0 && args[0] == "--rendertest")
+            {
+                RenderTest();
                 return;
             }
 
@@ -71,6 +82,57 @@ namespace ClaudeTokenMeter
                 r.Active, r.UsedTokens, r.BlockStartUtc, r.ResetAtUtc, r.LastActivityUtc, r.Error,
                 r.FromApi, r.SessionPct, r.SessionResetUtc, r.WeeklyPct, r.WeeklyScopedPct, r.WeeklyScopedModel);
             File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dump.txt"), text);
+        }
+
+        // Renders a sample card in each of the three palettes (dark / light /
+        // accent) to PNG files, so the theming can be eyeballed without needing
+        // to flip the actual Windows theme. The accent sample uses this machine's
+        // real accent color (falling back to Windows blue).
+        private static void RenderTest()
+        {
+            Config cfg = Config.Load();
+            // Force a predictable layout for the sample regardless of saved config.
+            cfg.showTitle = true;
+            cfg.showSessionBar = true;
+            cfg.showValueText = true;
+            cfg.showResetTime = true;
+
+            UsageResult usage = new UsageResult();
+            usage.FromApi = true;
+            usage.SessionPct = 42.0;
+            usage.SessionResetUtc = DateTime.UtcNow.AddHours(2);
+            usage.WeeklyPct = 30.0;
+            usage.FetchedAtUtc = DateTime.UtcNow;
+            usage.ScopedLimits = new List<ScopedLimit>();
+            ScopedLimit sl = new ScopedLimit();
+            sl.Model = "Fable";
+            sl.Pct = 55.0;
+            usage.ScopedLimits.Add(sl);
+
+            Color accent = ThemeManager.ReadAccentColor();
+
+            RenderOnePalette(cfg, usage, 0, 0, accent, "rendertest_dark.png");
+            RenderOnePalette(cfg, usage, 1, 0, accent, "rendertest_light.png");
+            RenderOnePalette(cfg, usage, 0, 1, accent, "rendertest_accent.png");
+        }
+
+        private static void RenderOnePalette(Config cfg, UsageResult usage,
+            int light, int prevalence, Color accent, string fileName)
+        {
+            ThemeManager.ForceForTest(light, prevalence, accent);
+
+            const int width = 260;
+            const int height = 40;
+            using (Bitmap bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb))
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+                CardRenderer.Draw(g, cfg, usage, 1f, width, height, false);
+                string outPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, fileName);
+                bmp.Save(outPath, ImageFormat.Png);
+            }
         }
     }
 }

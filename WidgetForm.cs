@@ -57,7 +57,7 @@ namespace ClaudeTokenMeter
             // Off-screen so it never flashes at (0,0) before placement.
             Location = new Point(-3000, -3000);
             Size = new Size(LogicalWidth, LogicalHeight);
-            BackColor = Color.FromArgb(32, 32, 32);
+            BackColor = ThemeManager.Current.Background;
 
             Cursor = Cursors.Hand;
 
@@ -353,6 +353,15 @@ namespace ClaudeTokenMeter
 
         public void UpdatePlacement()
         {
+            // Re-read the Windows theme; if the palette changed (light/dark
+            // toggle or accent-on-taskbar), re-tint the window background and
+            // force a full repaint so the card matches the taskbar again.
+            if (ThemeManager.Refresh())
+            {
+                BackColor = ThemeManager.Current.Background;
+                Invalidate();
+            }
+
             try
             {
                 Screen target = ResolveTargetScreen();

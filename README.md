@@ -26,6 +26,7 @@ Multi-bar mode (5-hour session / weekly / per-model) and the settings window:
 - **Survives Explorer restarts** — the widget reattaches automatically.
 - **Single instance** — a second copy exits immediately if one is already running.
 - **Rate-limit aware** — backs off on HTTP 429 (honoring `Retry-After`) and keeps showing the last good API data instead of jumping to the rough local estimate.
+- **Theme sync** — matches the Windows taskbar automatically: light theme, dark theme, and accent-colored taskbars, with live re-detection when you switch.
 - **Bilingual UI** — Japanese / English, follows the OS display language.
 - **Zero dependencies** — a single ~50 KB `.exe`; uses .NET Framework 4.8 that is already built into Windows. No runtime to install.
 

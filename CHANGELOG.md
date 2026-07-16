@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-16
+
+### Added
+- Windows theme sync: the card now matches the taskbar — light theme, dark theme, and "accent color on Start and taskbar" are detected from the registry and re-checked every few seconds, so theme switches apply live
+- `--rendertest` diagnostic flag renders sample cards for all three palettes
+
 ## [1.5.2] - 2026-07-16
 
 ### Fixed

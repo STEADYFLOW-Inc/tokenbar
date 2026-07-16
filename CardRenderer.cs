@@ -43,8 +43,10 @@ namespace ClaudeTokenMeter
             int w = widthPx;
             int h = heightPx;
 
+            Theme theme = ThemeManager.Current;
+
             // Taskbar-matching background fill.
-            using (SolidBrush bg = new SolidBrush(Color.FromArgb(32, 32, 32)))
+            using (SolidBrush bg = new SolidBrush(theme.Background))
             {
                 g.FillRectangle(bg, 0, 0, w, h);
             }
@@ -52,8 +54,8 @@ namespace ClaudeTokenMeter
             // Rounded card covering the client minus 1px.
             Rectangle card = new Rectangle(0, 0, Math.Max(1, w - 1), Math.Max(1, h - 1));
             float radius = 6f * s;
-            Color cardFill = hovered ? Color.FromArgb(52, 52, 52) : Color.FromArgb(45, 45, 45);
-            Color cardBorderColor = hovered ? Color.FromArgb(96, 96, 96) : Color.FromArgb(70, 70, 70);
+            Color cardFill = hovered ? theme.CardFillHover : theme.CardFill;
+            Color cardBorderColor = hovered ? theme.CardBorderHover : theme.CardBorder;
             using (GraphicsPath cardPath = RoundedRect(card, radius))
             {
                 using (SolidBrush cardBrush = new SolidBrush(cardFill))
@@ -142,7 +144,7 @@ namespace ClaudeTokenMeter
         private static void DrawTitle(Graphics g, float s)
         {
             using (Font titleFont = new Font("Segoe UI", 10.5f * s, GraphicsUnit.Pixel))
-            using (SolidBrush titleBrush = new SolidBrush(Color.FromArgb(200, 200, 200)))
+            using (SolidBrush titleBrush = new SolidBrush(ThemeManager.Current.TitleText))
             {
                 g.DrawString(Strings.Title, titleFont, titleBrush, ContentX * s, 5f * s);
             }
@@ -177,14 +179,14 @@ namespace ClaudeTokenMeter
                     usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
                 longText = cachedAt;
                 compactText = cachedAt; // already compact
-                color = Color.FromArgb(198, 168, 120);
+                color = ThemeManager.Current.StaleText;
             }
             else if (usage.SessionResetUtc.HasValue)
             {
                 string local = usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm");
                 longText = string.Format(CultureInfo.InvariantCulture, Strings.TitleResetFmt, local);
                 compactText = string.Format(CultureInfo.InvariantCulture, Strings.ResetFmt, local);
-                color = Color.FromArgb(160, 160, 160);
+                color = ThemeManager.Current.DimText;
             }
             else
             {
@@ -426,7 +428,7 @@ namespace ClaudeTokenMeter
         {
             float y = titleVisible ? 18.5f * s : (h - 9f * s) / 2f;
             using (Font errFont = new Font("Segoe UI", 9f * s, GraphicsUnit.Pixel))
-            using (SolidBrush errBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+            using (SolidBrush errBrush = new SolidBrush(ThemeManager.Current.ErrorText))
             {
                 g.DrawString(usage.Error, errFont, errBrush, ContentX * s, y);
             }
@@ -488,7 +490,7 @@ namespace ClaudeTokenMeter
             if (row.NoData)
             {
                 using (Font naFont = new Font("Segoe UI", 12f * s, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (SolidBrush naBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+                using (SolidBrush naBrush = new SolidBrush(ThemeManager.Current.DimText))
                 {
                     g.DrawString("—", naFont, naBrush, valueX, valueY);
                 }
@@ -498,7 +500,7 @@ namespace ClaudeTokenMeter
             string valueText = string.Format(
                 CultureInfo.InvariantCulture, Strings.RemainingFmt, row.PctValue);
             using (Font valueFont = new Font("Segoe UI", 12f * s, FontStyle.Bold, GraphicsUnit.Pixel))
-            using (SolidBrush valueBrush = new SolidBrush(Color.FromArgb(255, 255, 255)))
+            using (SolidBrush valueBrush = new SolidBrush(ThemeManager.Current.ValueText))
             {
                 g.DrawString(valueText, valueFont, valueBrush, valueX, valueY);
 
@@ -532,9 +534,9 @@ namespace ClaudeTokenMeter
             bool stale = usage != null && usage.FromApi && usage.Stale;
             if (stale)
             {
-                return Color.FromArgb(198, 168, 120);
+                return ThemeManager.Current.StaleText;
             }
-            return Color.FromArgb(160, 160, 160);
+            return ThemeManager.Current.DimText;
         }
 
         private static void DrawResetSmall(Graphics g, float s, string text, float xLogical, float yLogical, Color color)
@@ -573,7 +575,7 @@ namespace ClaudeTokenMeter
                     CultureInfo.InvariantCulture,
                     Strings.CachedAtFmt,
                     usage.FetchedAtUtc.ToLocalTime().ToString("H:mm"));
-                color = Color.FromArgb(198, 168, 120);
+                color = ThemeManager.Current.StaleText;
             }
             else if (usage.SessionResetUtc.HasValue)
             {
@@ -581,7 +583,7 @@ namespace ClaudeTokenMeter
                     CultureInfo.InvariantCulture,
                     Strings.ResetFmt,
                     usage.SessionResetUtc.Value.ToLocalTime().ToString("H:mm"));
-                color = Color.FromArgb(160, 160, 160);
+                color = ThemeManager.Current.DimText;
             }
             else
             {
@@ -720,7 +722,7 @@ namespace ClaudeTokenMeter
         {
             string text = "+" + hidden.ToString(CultureInfo.InvariantCulture);
             using (Font font = new Font("Segoe UI", 8f * s, GraphicsUnit.Pixel))
-            using (SolidBrush brush = new SolidBrush(Color.FromArgb(140, 140, 140)))
+            using (SolidBrush brush = new SolidBrush(ThemeManager.Current.DimText))
             {
                 StringFormat tight = StringFormat.GenericTypographic;
                 SizeF size = g.MeasureString(text, font, int.MaxValue, tight);
@@ -736,7 +738,7 @@ namespace ClaudeTokenMeter
         {
             float fontPx = compact ? 8.5f : 9f;
             using (Font labelFont = new Font("Segoe UI", fontPx * s, GraphicsUnit.Pixel))
-            using (SolidBrush labelBrush = new SolidBrush(Color.FromArgb(160, 160, 160)))
+            using (SolidBrush labelBrush = new SolidBrush(ThemeManager.Current.DimText))
             {
                 SizeF size = g.MeasureString(label, labelFont);
                 float y = rowMidLogical * s - size.Height / 2f;
@@ -748,7 +750,7 @@ namespace ClaudeTokenMeter
         {
             float fontPx = compact ? 8.5f : 9.5f;
             using (Font pctFont = new Font("Segoe UI", fontPx * s, FontStyle.Bold, GraphicsUnit.Pixel))
-            using (SolidBrush pctBrush = new SolidBrush(Color.FromArgb(240, 240, 240)))
+            using (SolidBrush pctBrush = new SolidBrush(ThemeManager.Current.ValueText))
             {
                 SizeF size = g.MeasureString(pctText, pctFont);
                 float y = rowMidLogical * s - size.Height / 2f;
@@ -766,7 +768,7 @@ namespace ClaudeTokenMeter
 
             RectangleF track = new RectangleF(x, y, w, h);
             using (GraphicsPath trackPath = RoundedRect(track, r))
-            using (SolidBrush trackBrush = new SolidBrush(Color.FromArgb(74, 74, 74)))
+            using (SolidBrush trackBrush = new SolidBrush(ThemeManager.Current.BarTrack))
             {
                 g.FillPath(trackBrush, trackPath);
             }
