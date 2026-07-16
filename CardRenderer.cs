@@ -37,7 +37,7 @@ namespace ClaudeTokenMeter
         // The caller is responsible for setting SmoothingMode / TextRenderingHint
         // (WidgetForm and the preview both do this before calling Draw).
         public static void Draw(Graphics g, Config cfg, UsageResult usage, float scale,
-            int widthPx, int heightPx, bool hovered)
+            int widthPx, int heightPx, bool hovered, bool drawBackground)
         {
             float s = scale > 0f ? scale : 1f;
             int w = widthPx;
@@ -45,10 +45,19 @@ namespace ClaudeTokenMeter
 
             Theme theme = ThemeManager.Current;
 
-            // Taskbar-matching background fill.
-            using (SolidBrush bg = new SolidBrush(theme.Background))
+            // Background: taskbar-matching fill when drawBackground is true;
+            // otherwise clear to transparent so the layered window shows the
+            // real (translucent) taskbar outside the rounded card.
+            if (drawBackground)
             {
-                g.FillRectangle(bg, 0, 0, w, h);
+                using (SolidBrush bg = new SolidBrush(theme.Background))
+                {
+                    g.FillRectangle(bg, 0, 0, w, h);
+                }
+            }
+            else
+            {
+                g.Clear(Color.Transparent);
             }
 
             // Rounded card covering the client minus 1px.

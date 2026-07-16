@@ -844,7 +844,7 @@ namespace ClaudeTokenMeter
             try
             {
                 g.TranslateTransform(cardX, cardY);
-                CardRenderer.Draw(g, cfg, u, 1f, cardW, cardH, false);
+                CardRenderer.Draw(g, cfg, u, 1f, cardW, cardH, false, false);
             }
             finally
             {

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-07-16
+
+### Added
+- Per-pixel transparency: the window is now a layered window, so everything outside the rounded card is truly transparent — the real (translucent, wallpaper-tinted) taskbar shows through instead of a solid color approximation. Transparent areas are also click-through to the taskbar
+
 ## [1.7.4] - 2026-07-16
 
 ### Fixed

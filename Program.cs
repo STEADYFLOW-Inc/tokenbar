@@ -139,7 +139,7 @@ namespace ClaudeTokenMeter
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
-                CardRenderer.Draw(g, cfg, usage, 1f, width, height, false);
+                CardRenderer.Draw(g, cfg, usage, 1f, width, height, false, true);
                 string outPath = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, fileName);
                 bmp.Save(outPath, ImageFormat.Png);

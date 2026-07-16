@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
@@ -21,6 +22,12 @@ namespace ClaudeTokenMeter
         // Win32 constants.
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int WS_EX_TOOLWINDOW = 0x80;
+        private const int WS_EX_LAYERED = 0x00080000;
+
+        // Layered-window blend/update constants.
+        private const byte AC_SRC_OVER = 0x00;
+        private const byte AC_SRC_ALPHA = 0x01;
+        private const uint ULW_ALPHA = 0x00000002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOACTIVATE = 0x0010;
@@ -101,6 +108,10 @@ namespace ClaudeTokenMeter
                     0,
                     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
             }
+
+            // Push an initial layered bitmap so the window has valid per-pixel
+            // alpha content immediately (before the first placement, if any).
+            UpdateVisual();
         }
 
         // Fires whenever the foreground window changes. React instantly so we
@@ -143,6 +154,7 @@ namespace ClaudeTokenMeter
                 CreateParams cp = base.CreateParams;
                 cp.ExStyle |= WS_EX_NOACTIVATE;
                 cp.ExStyle |= WS_EX_TOOLWINDOW;
+                cp.ExStyle |= WS_EX_LAYERED;
                 return cp;
             }
         }
@@ -169,14 +181,14 @@ namespace ClaudeTokenMeter
         {
             base.OnMouseEnter(e);
             hovered = true;
-            Invalidate();
+            UpdateVisual();
         }
 
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
             hovered = false;
-            Invalidate();
+            UpdateVisual();
         }
 
         // ---- Context menu -------------------------------------------------
@@ -237,7 +249,7 @@ namespace ClaudeTokenMeter
         {
             usage = u != null ? u : new UsageResult();
             tip.SetToolTip(this, BuildTooltip(usage));
-            Invalidate();
+            UpdateVisual();
         }
 
         private string BuildTooltip(UsageResult u)
@@ -369,13 +381,106 @@ namespace ClaudeTokenMeter
 
         // ---- Painting -----------------------------------------------------
 
+        // With a layered (WS_EX_LAYERED) window driven by UpdateLayeredWindow,
+        // WM_PAINT carries no visible content — all rendering flows through
+        // UpdateVisual(). Keep a minimal no-op override so no stray background
+        // painting fights the layered bitmap.
         protected override void OnPaint(PaintEventArgs e)
         {
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        }
 
-            CardRenderer.Draw(g, cfg, usage, scale, ClientSize.Width, ClientSize.Height, hovered);
+        // Renders the card into a 32bpp premultiplied-alpha bitmap and pushes it
+        // to the layered window via UpdateLayeredWindow, so the area outside the
+        // rounded card is truly transparent and the translucent taskbar shows
+        // through. Replaces the old OnPaint/Invalidate repaint path.
+        private void UpdateVisual()
+        {
+            try
+            {
+                if (!IsHandleCreated || IsDisposed)
+                {
+                    return;
+                }
+
+                int w = Width;
+                int h = Height;
+                if (w <= 0 || h <= 0)
+                {
+                    return;
+                }
+
+                using (Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(bmp))
+                    {
+                        g.SmoothingMode = SmoothingMode.AntiAlias;
+                        // ClearType on a transparent background produces color
+                        // fringing; AntiAliasGridFit keeps text clean on the
+                        // per-pixel-alpha bitmap.
+                        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+                        CardRenderer.Draw(g, cfg, usage, scale, w, h, hovered, false);
+                    }
+
+                    PushLayeredBitmap(bmp, w, h);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        // Pushes the given ARGB bitmap to the layered window. Keeps the current
+        // window position (pptDst = null) and uses the bitmap's own per-pixel
+        // alpha (AC_SRC_ALPHA). Fully cleans up all GDI resources.
+        private void PushLayeredBitmap(Bitmap bmp, int w, int h)
+        {
+            IntPtr screenDc = GetDC(IntPtr.Zero);
+            IntPtr memDc = IntPtr.Zero;
+            IntPtr hBitmap = IntPtr.Zero;
+            IntPtr oldBitmap = IntPtr.Zero;
+            try
+            {
+                memDc = CreateCompatibleDC(screenDc);
+                hBitmap = bmp.GetHbitmap(Color.FromArgb(0));
+                oldBitmap = SelectObject(memDc, hBitmap);
+
+                SIZE size = new SIZE();
+                size.cx = w;
+                size.cy = h;
+
+                POINT srcPoint = new POINT();
+                srcPoint.x = 0;
+                srcPoint.y = 0;
+
+                BLENDFUNCTION blend = new BLENDFUNCTION();
+                blend.BlendOp = AC_SRC_OVER;
+                blend.BlendFlags = 0;
+                blend.SourceConstantAlpha = 255;
+                blend.AlphaFormat = AC_SRC_ALPHA;
+
+                UpdateLayeredWindow(Handle, screenDc, IntPtr.Zero, ref size,
+                    memDc, ref srcPoint, 0, ref blend, ULW_ALPHA);
+            }
+            finally
+            {
+                if (screenDc != IntPtr.Zero)
+                {
+                    ReleaseDC(IntPtr.Zero, screenDc);
+                }
+                if (memDc != IntPtr.Zero)
+                {
+                    if (oldBitmap != IntPtr.Zero)
+                    {
+                        SelectObject(memDc, oldBitmap);
+                    }
+                    DeleteDC(memDc);
+                }
+                if (hBitmap != IntPtr.Zero)
+                {
+                    DeleteObject(hBitmap);
+                }
+            }
         }
 
         // ---- Taskbar placement --------------------------------------------
@@ -434,7 +539,7 @@ namespace ClaudeTokenMeter
             if (ThemeManager.Refresh())
             {
                 BackColor = ThemeManager.Current.Background;
-                Invalidate();
+                UpdateVisual();
             }
 
             try
@@ -460,7 +565,9 @@ namespace ClaudeTokenMeter
             catch
             {
             }
-            Invalidate();
+            // Placement (SetWindowPos) has set the final position+size above;
+            // now push the layered bitmap so it matches the new size.
+            UpdateVisual();
         }
 
         private bool ShouldHideForFullscreen(Screen target)
@@ -718,6 +825,55 @@ namespace ClaudeTokenMeter
             public int right;
             public int bottom;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SIZE
+        {
+            public int cx;
+            public int cy;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int x;
+            public int y;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        private struct BLENDFUNCTION
+        {
+            public byte BlendOp;
+            public byte BlendFlags;
+            public byte SourceConstantAlpha;
+            public byte AlphaFormat;
+        }
+
+        [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+        private static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+        [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
+        private static extern IntPtr CreateCompatibleDC(IntPtr hDC);
+
+        [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DeleteDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll", ExactSpelling = true)]
+        private static extern IntPtr SelectObject(IntPtr hDC, IntPtr hObject);
+
+        [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DeleteObject(IntPtr hObject);
+
+        [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst,
+            IntPtr pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc,
+            int crKey, ref BLENDFUNCTION pblend, uint dwFlags);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
