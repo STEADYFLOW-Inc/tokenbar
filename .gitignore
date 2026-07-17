@@ -5,8 +5,9 @@ dump.txt
 config.json
 usage_cache.json
 .claude/
-# Local test screenshots (root only — docs/ images are tracked)
+# Local screenshots / working images (docs/ images are tracked)
 /*.png
 /*.webp
+/image/
 Thumbs.db
 desktop.ini
